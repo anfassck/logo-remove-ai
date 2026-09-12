@@ -1,0 +1,10 @@
+{
+  "name": "cleanframe-ai",
+  "version": "1.0.0",
+  "description": "CleanFrame AI - AI-Assisted Video Restoration & Logo Removal",
+  "scripts": {
+    "dev:backend": "cd backend && npm start",
+    "dev:frontend": "cd frontend && npm run dev",
+    "install:all": "cd backend && npm install && cd ../frontend && npm install"
+  }
+}
