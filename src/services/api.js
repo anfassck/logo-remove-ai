@@ -1,6 +1,25 @@
-const API_BASE = '/api';
+let rawBase = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '');
+if (rawBase && !rawBase.endsWith('/api') && rawBase.startsWith('http')) {
+  rawBase = `${rawBase}/api`;
+}
+const API_BASE = rawBase || '/api';
+const SERVER_BASE = API_BASE.replace(/\/api$/, '');
 
 export const apiService = {
+  /**
+   * Helper to resolve relative media URLs to full backend URLs in production
+   */
+  resolveMediaUrl(url) {
+    if (!url) return null;
+    if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('blob:') || url.startsWith('data:')) {
+      return url;
+    }
+    if (url.startsWith('/api') && API_BASE.startsWith('http')) {
+      return `${SERVER_BASE}${url}`;
+    }
+    return url;
+  },
+
   /**
    * Fetch backend limits & configuration
    */

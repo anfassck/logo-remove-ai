@@ -133,14 +133,14 @@ export default function ComparisonView({ originalVideo, jobResult, onReset }) {
           {isImage ? (
             <img
               ref={restoredVidRef}
-              src={jobResult?.output?.imageUrl || jobResult?.output?.videoUrl}
+              src={apiService.resolveMediaUrl(jobResult?.output?.imageUrl || jobResult?.output?.videoUrl)}
               alt="Restored Photo"
               className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
             />
           ) : (
             <video
               ref={restoredVidRef}
-              src={jobResult?.output?.videoUrl}
+              src={apiService.resolveMediaUrl(jobResult?.output?.videoUrl)}
               onTimeUpdate={handleTimeUpdate}
               onEnded={() => setIsPlaying(false)}
               loop
@@ -158,7 +158,7 @@ export default function ComparisonView({ originalVideo, jobResult, onReset }) {
             {isImage ? (
               <img
                 ref={originalVidRef}
-                src={originalVideo?.imageUrl || originalVideo?.videoUrl}
+                src={apiService.resolveMediaUrl(originalVideo?.imageUrl || originalVideo?.videoUrl)}
                 alt="Original Photo"
                 className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
                 style={{
@@ -169,7 +169,7 @@ export default function ComparisonView({ originalVideo, jobResult, onReset }) {
             ) : (
               <video
                 ref={originalVidRef}
-                src={originalVideo?.videoUrl}
+                src={apiService.resolveMediaUrl(originalVideo?.videoUrl)}
                 loop
                 playsInline
                 muted={isMuted}

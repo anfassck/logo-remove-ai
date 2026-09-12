@@ -6,6 +6,7 @@ import {
   CheckCircle, ShieldAlert, Cpu, Brush, Square, ChevronLeft, ChevronRight,
   ZoomIn, ZoomOut, Wand2, Target, Crosshair, Sparkle, Minimize2, Plus, X
 } from 'lucide-react';
+import { apiService } from '../services/api';
 
 export default function VideoEditor({ videoData, onProcess, onReset }) {
   const videoRef = useRef(null);
@@ -528,14 +529,14 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
               {isImage ? (
                 <img
                   ref={videoRef}
-                  src={videoData.imageUrl || videoData.videoUrl}
+                  src={apiService.resolveMediaUrl(videoData.imageUrl || videoData.videoUrl)}
                   alt={videoData.originalName || "Uploaded image"}
                   className="w-full h-full object-contain pointer-events-none select-none"
                 />
               ) : (
                 <video
                   ref={videoRef}
-                  src={videoData.videoUrl}
+                  src={apiService.resolveMediaUrl(videoData.videoUrl)}
                   onTimeUpdate={handleTimeUpdate}
                   onLoadedMetadata={handleLoadedMetadata}
                   onEnded={() => setIsPlaying(false)}
