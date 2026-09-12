@@ -1,4 +1,8 @@
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/+$/, '');
+let rawBase = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '');
+if (rawBase && !rawBase.endsWith('/api') && rawBase.startsWith('http')) {
+  rawBase = `${rawBase}/api`;
+}
+const API_BASE = rawBase || '/api';
 const SERVER_BASE = API_BASE.replace(/\/api$/, '');
 
 export const apiService = {
