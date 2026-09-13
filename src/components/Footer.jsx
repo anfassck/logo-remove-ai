@@ -1,5 +1,6 @@
 import React from 'react';
-import { Crop, Sparkles, ShieldAlert, Heart } from 'lucide-react';
+import { Sparkles, ShieldAlert, Heart } from 'lucide-react';
+import logoImg from '../assets/logo.png';
 
 export default function Footer() {
   return (
@@ -10,9 +11,13 @@ export default function Footer() {
           {/* Brand Info */}
           <div className="md:col-span-6">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-brand-cyan p-[1px]">
-                <div className="w-full h-full bg-dark-900 rounded-[11px] flex items-center justify-center">
-                  <Crop className="w-4 h-4 text-brand-400" />
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 via-brand-500 to-brand-cyan p-[1.5px] shadow-md shadow-brand-500/20">
+                <div className="w-full h-full bg-dark-900 rounded-[10px] flex items-center justify-center p-1.5 overflow-hidden">
+                  <img 
+                    src={logoImg} 
+                    alt="CleanFrame AI" 
+                    className="w-full h-full object-contain filter drop-shadow"
+                  />
                 </div>
               </div>
               <span className="font-extrabold text-lg text-white">
