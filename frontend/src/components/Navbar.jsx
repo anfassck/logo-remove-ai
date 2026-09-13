@@ -1,5 +1,6 @@
 import React from 'react';
-import { Sparkles, Crop, ArrowRight, ShieldCheck, Video, Code2 } from 'lucide-react';
+import { ArrowRight, ShieldCheck, Video, Code2 } from 'lucide-react';
+import logoImg from '../assets/logo.png';
 
 export default function Navbar({ onStartClick }) {
   return (
@@ -8,13 +9,15 @@ export default function Navbar({ onStartClick }) {
         {/* Brand Logo */}
         <div 
           onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-          className="flex items-center gap-3 cursor-pointer group"
+          className="flex items-center gap-3.5 cursor-pointer group"
         >
-          <div className="relative w-11 h-11 rounded-xl bg-gradient-to-tr from-brand-600 to-brand-cyan p-[1px] shadow-lg shadow-brand-500/20 group-hover:shadow-brand-500/40 transition-all duration-300">
-            <div className="w-full h-full bg-dark-900 rounded-[11px] flex items-center justify-center relative overflow-hidden">
-              <div className="absolute inset-0 bg-brand-500/10 group-hover:bg-brand-500/20 transition-colors"></div>
-              <Crop className="w-5 h-5 text-brand-400 group-hover:scale-110 transition-transform duration-300" />
-              <Sparkles className="w-3.5 h-3.5 text-brand-cyan absolute top-1.5 right-1.5 animate-pulse" />
+          <div className="relative w-11 h-11 rounded-xl bg-gradient-to-tr from-brand-600 via-brand-500 to-brand-cyan p-[1.5px] shadow-lg shadow-brand-500/25 group-hover:shadow-brand-500/50 group-hover:scale-105 transition-all duration-300">
+            <div className="w-full h-full bg-dark-900 rounded-[10px] flex items-center justify-center p-1.5 overflow-hidden">
+              <img 
+                src={logoImg} 
+                alt="CleanFrame AI Logo" 
+                className="w-full h-full object-contain filter drop-shadow-md group-hover:scale-110 transition-transform duration-300"
+              />
             </div>
           </div>
           <div>
