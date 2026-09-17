@@ -4,7 +4,7 @@ import {
   Play, Pause, RotateCcw, RotateCw, Trash2,
   Sparkles, Layers, ArrowLeft,
   CheckCircle, ChevronLeft, ChevronRight,
-  ZoomIn, Plus, X, Maximize2, Minimize2, Move
+  ZoomIn, Plus, X, Maximize2, Minimize2, Move, Crosshair
 } from 'lucide-react';
 import { apiService } from '../services/api';
 
@@ -26,24 +26,43 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
   const vidW = videoData?.width || 1280;
   const vidH = videoData?.height || 720;
 
-  // Calculate clean, compact initial box (Small size so it doesn't create huge blur)
+  // Calculate clean, compact initial box positioned directly over watermark zone
   const calcDefaultBox = (position = 'bottom-right') => {
-    // Compact size: ~32-38px for tight logos and sparkle watermarks
-    const baseW = Math.max(30, Math.min(50, Math.round(Math.min(vidW, vidH) * 0.05)));
-    const baseH = Math.max(30, Math.min(50, Math.round(Math.min(vidW, vidH) * 0.05)));
-    const padX = Math.max(12, Math.round(vidW * 0.025));
-    const padY = Math.max(12, Math.round(vidH * 0.035));
+    // Compact size: ~32-42px for tight logos and sparkle watermarks
+    const baseW = Math.max(28, Math.min(48, Math.round(Math.min(vidW, vidH) * 0.055)));
+    const baseH = Math.max(28, Math.min(48, Math.round(Math.min(vidW, vidH) * 0.055)));
 
     switch (position) {
       case 'top-right':
-        return { x: vidW - baseW - padX, y: padY, width: baseW, height: baseH };
+        return { 
+          x: Math.max(0, Math.min(vidW - baseW - 4, Math.round(vidW * 0.84))), 
+          y: Math.max(0, Math.min(vidH - baseH - 4, Math.round(vidH * 0.05))), 
+          width: baseW, 
+          height: baseH 
+        };
       case 'bottom-left':
-        return { x: padX, y: vidH - baseH - padY, width: baseW, height: baseH };
+        return { 
+          x: Math.max(0, Math.min(vidW - baseW - 4, Math.round(vidW * 0.05))), 
+          y: Math.max(0, Math.min(vidH - baseH - 4, Math.round(vidH * 0.86))), 
+          width: baseW, 
+          height: baseH 
+        };
       case 'top-left':
-        return { x: padX, y: padY, width: baseW, height: baseH };
+        return { 
+          x: Math.max(0, Math.min(vidW - baseW - 4, Math.round(vidW * 0.05))), 
+          y: Math.max(0, Math.min(vidH - baseH - 4, Math.round(vidH * 0.05))), 
+          width: baseW, 
+          height: baseH 
+        };
       case 'bottom-right':
       default:
-        return { x: vidW - baseW - padX, y: vidH - baseH - padY, width: baseW, height: baseH };
+        // Position directly over typical bottom-right watermark (around 84% X, 86% Y)
+        return { 
+          x: Math.max(0, Math.min(vidW - baseW - 4, Math.round(vidW * 0.84))), 
+          y: Math.max(0, Math.min(vidH - baseH - 4, Math.round(vidH * 0.86))), 
+          width: baseW, 
+          height: baseH 
+        };
     }
   };
 
@@ -75,7 +94,7 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
   const handleAddNewBox = () => {
     const nextId = boxes.length > 0 ? Math.max(...boxes.map(b => b.id)) + 1 : 1;
     const offset = (boxes.length * 25) % 120;
-    const baseSize = Math.max(32, Math.min(48, Math.round(Math.min(vidW, vidH) * 0.05)));
+    const baseSize = Math.max(32, Math.min(48, Math.round(Math.min(vidW, vidH) * 0.055)));
 
     const newBox = {
       id: nextId,
@@ -129,8 +148,8 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
     const activeBox = boxes.find(b => b.id === activeBoxId);
     if (!activeBox) return;
 
-    const w = Math.max(16, Math.min(vidW - activeBox.x, targetW));
-    const h = Math.max(16, Math.min(vidH - activeBox.y, targetH));
+    const w = Math.max(16, Math.min(vidW - activeBox.x - 2, targetW));
+    const h = Math.max(16, Math.min(vidH - activeBox.y - 2, targetH));
 
     const newBoxes = boxes.map(b => b.id === activeBoxId ? { ...b, width: w, height: h } : b);
     setBoxes(newBoxes);
@@ -141,8 +160,8 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
     const activeBox = boxes.find(b => b.id === activeBoxId);
     if (!activeBox) return;
 
-    const newW = Math.max(16, Math.min(vidW - activeBox.x, activeBox.width + delta));
-    const newH = Math.max(16, Math.min(vidH - activeBox.y, activeBox.height + delta));
+    const newW = Math.max(16, Math.min(vidW - activeBox.x - 2, activeBox.width + delta));
+    const newH = Math.max(16, Math.min(vidH - activeBox.y - 2, activeBox.height + delta));
     
     const newBoxes = boxes.map(b => b.id === activeBoxId ? { ...b, width: newW, height: newH } : b);
     setBoxes(newBoxes);
@@ -153,8 +172,8 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
     const activeBox = boxes.find(b => b.id === activeBoxId);
     if (!activeBox) return;
 
-    const newX = Math.max(0, Math.min(vidW - activeBox.width, activeBox.x + dx));
-    const newY = Math.max(0, Math.min(vidH - activeBox.height, activeBox.y + dy));
+    const newX = Math.max(2, Math.min(vidW - activeBox.width - 2, activeBox.x + dx));
+    const newY = Math.max(2, Math.min(vidH - activeBox.height - 2, activeBox.y + dy));
 
     const newBoxes = boxes.map(b => b.id === activeBoxId ? { ...b, x: newX, y: newY } : b);
     setBoxes(newBoxes);
@@ -212,35 +231,6 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
     }
   };
 
-  // Precise Scaling helper
-  const getRenderMetrics = () => {
-    if (!videoRef.current) return { scaleX: 1, scaleY: 1, offsetX: 0, offsetY: 0, renderW: vidW, renderH: vidH, rect: {} };
-    const rect = videoRef.current.getBoundingClientRect();
-    const containerW = rect.width;
-    const containerH = rect.height;
-    const videoAspect = vidW / vidH;
-    const containerAspect = containerW / containerH;
-
-    let renderW, renderH, offsetX, offsetY;
-
-    if (containerAspect > videoAspect) {
-      renderH = containerH;
-      renderW = containerH * videoAspect;
-      offsetX = (containerW - renderW) / 2;
-      offsetY = 0;
-    } else {
-      renderW = containerW;
-      renderH = containerW / videoAspect;
-      offsetX = 0;
-      offsetY = (containerH - renderH) / 2;
-    }
-
-    const scaleX = renderW / vidW;
-    const scaleY = renderH / vidH;
-
-    return { scaleX, scaleY, offsetX, offsetY, renderW, renderH, rect };
-  };
-
   // Helper to extract coordinates from Mouse or Touch events
   const getPointerPos = (e) => {
     if (e.touches && e.touches.length > 0) {
@@ -275,13 +265,17 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
   };
 
   const handlePointerMove = (e) => {
-    if (!isDragging || !videoRef.current || activeBoxId === null) return;
+    if (!isDragging || !containerRef.current || activeBoxId === null) return;
     if (e.cancelable && e.type === 'touchmove') e.preventDefault();
-    const metrics = getRenderMetrics();
+
+    const rect = containerRef.current.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+
     const pos = getPointerPos(e);
 
-    const deltaX = (pos.clientX - dragStart.x) / (metrics.scaleX * zoomLevel);
-    const deltaY = (pos.clientY - dragStart.y) / (metrics.scaleY * zoomLevel);
+    // Delta converted to original video/image coordinates
+    const deltaX = ((pos.clientX - dragStart.x) / (rect.width * zoomLevel)) * vidW;
+    const deltaY = ((pos.clientY - dragStart.y) / (rect.height * zoomLevel)) * vidH;
 
     const targetBox = boxes.find(b => b.id === activeBoxId);
     if (!targetBox) return;
@@ -289,28 +283,28 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
     let updated = { ...targetBox };
 
     if (dragHandle === 'move') {
-      updated.x = Math.max(0, Math.min(vidW - targetBox.width, dragStart.boxX + deltaX));
-      updated.y = Math.max(0, Math.min(vidH - targetBox.height, dragStart.boxY + deltaY));
+      updated.x = Math.max(2, Math.min(vidW - targetBox.width - 2, dragStart.boxX + deltaX));
+      updated.y = Math.max(2, Math.min(vidH - targetBox.height - 2, dragStart.boxY + deltaY));
     } else if (dragHandle === 'se') {
-      updated.width = Math.max(16, Math.min(vidW - targetBox.x, dragStart.boxW + deltaX));
-      updated.height = Math.max(16, Math.min(vidH - targetBox.y, dragStart.boxH + deltaY));
+      updated.width = Math.max(16, Math.min(vidW - targetBox.x - 2, dragStart.boxW + deltaX));
+      updated.height = Math.max(16, Math.min(vidH - targetBox.y - 2, dragStart.boxH + deltaY));
     } else if (dragHandle === 'nw') {
       const maxX = dragStart.boxX + dragStart.boxW - 16;
       const maxY = dragStart.boxY + dragStart.boxH - 16;
-      updated.x = Math.max(0, Math.min(maxX, dragStart.boxX + deltaX));
-      updated.y = Math.max(0, Math.min(maxY, dragStart.boxY + deltaY));
+      updated.x = Math.max(2, Math.min(maxX, dragStart.boxX + deltaX));
+      updated.y = Math.max(2, Math.min(maxY, dragStart.boxY + deltaY));
       updated.width = dragStart.boxW - (updated.x - dragStart.boxX);
       updated.height = dragStart.boxH - (updated.y - dragStart.boxY);
     } else if (dragHandle === 'ne') {
       const maxY = dragStart.boxY + dragStart.boxH - 16;
-      updated.y = Math.max(0, Math.min(maxY, dragStart.boxY + deltaY));
-      updated.width = Math.max(16, Math.min(vidW - targetBox.x, dragStart.boxW + deltaX));
+      updated.y = Math.max(2, Math.min(maxY, dragStart.boxY + deltaY));
+      updated.width = Math.max(16, Math.min(vidW - targetBox.x - 2, dragStart.boxW + deltaX));
       updated.height = dragStart.boxH - (updated.y - dragStart.boxY);
     } else if (dragHandle === 'sw') {
       const maxX = dragStart.boxX + dragStart.boxW - 16;
-      updated.x = Math.max(0, Math.min(maxX, dragStart.boxX + deltaX));
+      updated.x = Math.max(2, Math.min(maxX, dragStart.boxX + deltaX));
       updated.width = dragStart.boxW - (updated.x - dragStart.boxX);
-      updated.height = Math.max(16, Math.min(vidH - targetBox.y, dragStart.boxH + deltaY));
+      updated.height = Math.max(16, Math.min(vidH - targetBox.y - 2, dragStart.boxH + deltaY));
     }
 
     setBoxes(boxes.map(b => b.id === activeBoxId ? updated : b));
@@ -324,23 +318,25 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
     }
   };
 
-  // Click on canvas background to reposition active box
+  // Tap / Click on canvas directly repositions active box center to tap location
   const handleContainerPointerDown = (e) => {
-    if (isDragging) return;
-    const metrics = getRenderMetrics();
+    if (isDragging || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+
     const pos = getPointerPos(e);
+    const clickVideoX = ((pos.clientX - rect.left) / rect.width) * vidW;
+    const clickVideoY = ((pos.clientY - rect.top) / rect.height) * vidH;
 
-    const clickX = (pos.clientX - metrics.rect.left - metrics.offsetX) / metrics.scaleX;
-    const clickY = (pos.clientY - metrics.rect.top - metrics.offsetY) / metrics.scaleY;
+    if (clickVideoX < 0 || clickVideoX > vidW || clickVideoY < 0 || clickVideoY > vidH) return;
 
-    if (clickX < 0 || clickX > vidW || clickY < 0 || clickY > vidH) return;
+    const baseSize = Math.max(28, Math.min(48, Math.round(Math.min(vidW, vidH) * 0.055)));
 
     if (boxes.length === 0) {
-      const baseSize = 36;
       const newBox = {
         id: 1,
-        x: Math.max(0, Math.min(vidW - baseSize, clickX - baseSize / 2)),
-        y: Math.max(0, Math.min(vidH - baseSize, clickY - baseSize / 2)),
+        x: Math.max(2, Math.min(vidW - baseSize - 2, clickVideoX - baseSize / 2)),
+        y: Math.max(2, Math.min(vidH - baseSize - 2, clickVideoY - baseSize / 2)),
         width: baseSize,
         height: baseSize
       };
@@ -352,8 +348,8 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
       if (targetBox) {
         const updated = {
           ...targetBox,
-          x: Math.max(0, Math.min(vidW - targetBox.width, clickX - targetBox.width / 2)),
-          y: Math.max(0, Math.min(vidH - targetBox.height, clickY - targetBox.height / 2))
+          x: Math.max(2, Math.min(vidW - targetBox.width - 2, clickVideoX - targetBox.width / 2)),
+          y: Math.max(2, Math.min(vidH - targetBox.height - 2, clickVideoY - targetBox.height / 2))
         };
         const newBoxes = boxes.map(b => b.id === activeBoxId ? updated : b);
         setBoxes(newBoxes);
@@ -387,7 +383,6 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
     });
   };
 
-  const metrics = getRenderMetrics();
   const activeBox = boxes.find(b => b.id === activeBoxId);
 
   return (
@@ -465,7 +460,7 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
               </span>
             </h4>
             <p className="text-xs text-slate-300">
-              Drag the box directly over the logo, or tap a corner to snap:
+              Tap anywhere on the image to place the box over the logo:
             </p>
           </div>
         </div>
@@ -476,7 +471,7 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
             onClick={() => applyPresetPosition('bottom-right')}
             className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-dark-800 hover:bg-dark-700 text-brand-300 border border-brand-500/30 hover:border-brand-400 transition-all"
           >
-            📍 Bottom-Right
+            📍 Bottom-Right (Gemini)
           </button>
           <button
             onClick={() => applyPresetPosition('top-right')}
@@ -512,7 +507,6 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
         {/* Left Column: Interactive Video/Image Canvas with Multi-Area Overlays */}
         <div className="lg:col-span-8 flex flex-col gap-4">
           <div 
-            ref={containerRef}
             className="relative rounded-2xl glass-panel p-2 sm:p-3 overflow-hidden border border-white/10 shadow-2xl bg-dark-950 flex flex-col items-center justify-center select-none"
           >
             {/* Top Toolbar Overlay */}
@@ -529,13 +523,16 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
               )}
             </div>
 
-            {/* Canvas Container (Image or Video) with Touch Support */}
+            {/* Canvas Container with Pixel-Perfect Aspect Ratio & Percentage Coordinates */}
             <div 
-              className="relative mt-2 w-full max-h-[68vh] rounded-xl overflow-hidden bg-black flex items-center justify-center cursor-crosshair touch-none"
+              ref={containerRef}
+              className="relative mt-2 mx-auto rounded-xl overflow-hidden bg-black flex items-center justify-center cursor-crosshair touch-none select-none shadow-2xl"
               onMouseDown={handleContainerPointerDown}
               onTouchStart={handleContainerPointerDown}
               style={{
                 aspectRatio: `${vidW} / ${vidH}`,
+                maxHeight: '68vh',
+                maxWidth: '100%',
                 transform: `scale(${zoomLevel})`,
                 transformOrigin: 'bottom right',
                 transition: 'transform 0.2s ease-out',
@@ -548,7 +545,7 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
                   crossOrigin="anonymous"
                   src={apiService.resolveMediaUrl(videoData.imageUrl || videoData.videoUrl)}
                   alt={videoData.originalName || "Uploaded image"}
-                  className="w-full h-full object-contain pointer-events-none select-none"
+                  className="w-full h-full block object-contain pointer-events-none select-none"
                 />
               ) : (
                 <video
@@ -559,34 +556,34 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
                   onLoadedMetadata={handleLoadedMetadata}
                   onEnded={() => setIsPlaying(false)}
                   playsInline
-                  className="w-full h-full object-contain pointer-events-none"
+                  className="w-full h-full block object-contain pointer-events-none"
                 />
               )}
 
-              {/* RENDER ALL MULTI-SELECTION BOXES */}
+              {/* RENDER ALL MULTI-SELECTION BOXES WITH PERCENTAGE ACCURACY */}
               {boxes.map((b, idx) => {
                 const isActive = b.id === activeBoxId;
-                const bLeft = metrics.offsetX + (b.x * metrics.scaleX);
-                const bTop = metrics.offsetY + (b.y * metrics.scaleY);
-                const bWidth = b.width * metrics.scaleX;
-                const bHeight = b.height * metrics.scaleY;
+                const leftPercent = (b.x / vidW) * 100;
+                const topPercent = (b.y / vidH) * 100;
+                const widthPercent = (b.width / vidW) * 100;
+                const heightPercent = (b.height / vidH) * 100;
 
                 return (
                   <div
                     key={b.id}
                     style={{
-                      left: `${bLeft}px`,
-                      top: `${bTop}px`,
-                      width: `${bWidth}px`,
-                      height: `${bHeight}px`,
+                      left: `${leftPercent}%`,
+                      top: `${topPercent}%`,
+                      width: `${widthPercent}%`,
+                      height: `${heightPercent}%`,
                       touchAction: 'none'
                     }}
                     onMouseDown={(e) => handlePointerDown(e, 'move', b.id)}
                     onTouchStart={(e) => handlePointerDown(e, 'move', b.id)}
                     className={`absolute cursor-move transition-shadow duration-150 select-none ${
                       isActive
-                        ? 'border-2 border-brand-cyan bg-brand-cyan/20 shadow-[0_0_15px_rgba(6,182,212,0.7)] z-20'
-                        : 'border border-dashed border-slate-300/60 bg-white/10 hover:border-brand-400 z-10'
+                        ? 'border-2 border-brand-cyan bg-brand-cyan/25 shadow-[0_0_15px_rgba(6,182,212,0.8)] z-20'
+                        : 'border border-dashed border-slate-300/70 bg-white/10 hover:border-brand-400 z-10'
                     }`}
                   >
                     {/* Area Badge */}
@@ -656,28 +653,28 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
                 <div className="flex items-center gap-1">
                   <span className="text-[11px] font-bold text-slate-300 mr-1">Move:</span>
                   <button 
-                    onClick={() => nudgeActiveBox(0, -3)}
+                    onClick={() => nudgeActiveBox(0, -4)}
                     className="w-8 h-8 rounded-lg bg-dark-800 hover:bg-dark-700 active:bg-brand-500 text-slate-200 flex items-center justify-center border border-white/10 font-bold text-xs"
                     title="Nudge Up"
                   >
                     ⬆
                   </button>
                   <button 
-                    onClick={() => nudgeActiveBox(0, 3)}
+                    onClick={() => nudgeActiveBox(0, 4)}
                     className="w-8 h-8 rounded-lg bg-dark-800 hover:bg-dark-700 active:bg-brand-500 text-slate-200 flex items-center justify-center border border-white/10 font-bold text-xs"
                     title="Nudge Down"
                   >
                     ⬇
                   </button>
                   <button 
-                    onClick={() => nudgeActiveBox(-3, 0)}
+                    onClick={() => nudgeActiveBox(-4, 0)}
                     className="w-8 h-8 rounded-lg bg-dark-800 hover:bg-dark-700 active:bg-brand-500 text-slate-200 flex items-center justify-center border border-white/10 font-bold text-xs"
                     title="Nudge Left"
                   >
                     ⬅
                   </button>
                   <button 
-                    onClick={() => nudgeActiveBox(3, 0)}
+                    onClick={() => nudgeActiveBox(4, 0)}
                     className="w-8 h-8 rounded-lg bg-dark-800 hover:bg-dark-700 active:bg-brand-500 text-slate-200 flex items-center justify-center border border-white/10 font-bold text-xs"
                     title="Nudge Right"
                   >
@@ -712,7 +709,7 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
               <div className="w-full mt-3 px-2 py-1.5 flex items-center justify-between text-xs text-slate-300 border-t border-white/5">
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                  <span className="text-slate-300 font-medium">Photo Studio • Drag box over logo to remove</span>
+                  <span className="text-slate-300 font-medium">Photo Studio • Tap or drag box onto watermark</span>
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -807,27 +804,27 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
 
             <div className="grid grid-cols-3 gap-2">
               <button
-                onClick={() => setBoxFixedSize(32, 34)}
+                onClick={() => setBoxFixedSize(30, 32)}
                 className="py-2 px-2 rounded-xl bg-dark-900 hover:bg-dark-850 border border-brand-500/40 text-brand-200 text-xs font-semibold text-center hover:border-brand-400 transition-all"
               >
-                <div className="text-[10px] text-slate-400">Icon / Star</div>
-                <div className="font-bold text-xs mt-0.5">Small (32px)</div>
+                <div className="text-[10px] text-slate-400">Gemini Star</div>
+                <div className="font-bold text-xs mt-0.5">Small (30px)</div>
               </button>
 
               <button
-                onClick={() => setBoxFixedSize(55, 55)}
+                onClick={() => setBoxFixedSize(50, 50)}
                 className="py-2 px-2 rounded-xl bg-dark-900 hover:bg-dark-850 border border-white/10 text-slate-200 text-xs font-semibold text-center hover:border-brand-500/40 transition-all"
               >
                 <div className="text-[10px] text-slate-400">Standard Logo</div>
-                <div className="font-bold text-xs mt-0.5">Medium (55px)</div>
+                <div className="font-bold text-xs mt-0.5">Medium (50px)</div>
               </button>
 
               <button
-                onClick={() => setBoxFixedSize(110, 38)}
+                onClick={() => setBoxFixedSize(110, 36)}
                 className="py-2 px-2 rounded-xl bg-dark-900 hover:bg-dark-850 border border-white/10 text-slate-200 text-xs font-semibold text-center hover:border-brand-500/40 transition-all"
               >
                 <div className="text-[10px] text-slate-400">Text Watermark</div>
-                <div className="font-bold text-xs mt-0.5">Wide (110x38)</div>
+                <div className="font-bold text-xs mt-0.5">Wide (110x36)</div>
               </button>
             </div>
           </div>
