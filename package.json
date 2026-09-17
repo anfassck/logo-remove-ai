@@ -2,7 +2,11 @@
   "name": "cleanframe-ai",
   "version": "1.0.0",
   "description": "CleanFrame AI - AI-Assisted Video Restoration & Logo Removal",
+  "type": "module",
   "scripts": {
+    "start": "cd backend && node --max-old-space-size=256 server.js",
+    "build": "cd backend && npm install",
+    "postinstall": "cd backend && npm install",
     "dev:backend": "cd backend && npm start",
     "dev:frontend": "cd frontend && npm run dev",
     "install:all": "cd backend && npm install && cd ../frontend && npm install"
