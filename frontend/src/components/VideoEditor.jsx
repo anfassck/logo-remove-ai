@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
-  Play, Pause, RotateCcw, RotateCw, Trash2, Eye, EyeOff, 
-  Sparkles, Sliders, Layers, Film, ArrowLeft, Maximize2, 
-  CheckCircle, ShieldAlert, Cpu, Brush, Square, ChevronLeft, ChevronRight,
-  ZoomIn, ZoomOut, Wand2, Target, Crosshair, Sparkle, Minimize2, Plus, X
+  Play, Pause, RotateCcw, RotateCw, Trash2,
+  Sparkles, Layers, ArrowLeft,
+  CheckCircle, ChevronLeft, ChevronRight,
+  ZoomIn, Plus, X, Maximize2, Minimize2, Move
 } from 'lucide-react';
 import { apiService } from '../services/api';
 
@@ -19,199 +19,48 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(videoData?.duration || 0);
 
-  // Tool & Zoom state
-  const [activeTool, setActiveTool] = useState('rect');
+  // Zoom state
   const [zoomLevel, setZoomLevel] = useState(1);
   
   // Dimensions of media
   const vidW = videoData?.width || 1280;
   const vidH = videoData?.height || 720;
 
-  // AI Gemini Star Auto-Detection Engine (scans candidate zones for 4-pointed diamond sparkle)
-  const [isScanningAi, setIsScanningAi] = useState(false);
-  const [aiDetectionMessage, setAiDetectionMessage] = useState(null);
+  // Calculate clean, compact initial box (Small size so it doesn't create huge blur)
+  const calcDefaultBox = (position = 'bottom-right') => {
+    // Compact size: ~32-38px for tight logos and sparkle watermarks
+    const baseW = Math.max(30, Math.min(50, Math.round(Math.min(vidW, vidH) * 0.05)));
+    const baseH = Math.max(30, Math.min(50, Math.round(Math.min(vidW, vidH) * 0.05)));
+    const padX = Math.max(12, Math.round(vidW * 0.025));
+    const padY = Math.max(12, Math.round(vidH * 0.035));
 
-  const detectGeminiWatermark = () => {
-    if (!videoRef.current) return null;
-    setIsScanningAi(true);
-    setAiDetectionMessage('Scanning frame for Gemini watermark...');
-
-    try {
-      const canvas = document.createElement('canvas');
-      canvas.width = vidW;
-      canvas.height = vidH;
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      ctx.drawImage(videoRef.current, 0, 0, vidW, vidH);
-
-      const isVertical = vidH > vidW;
-      
-      // Candidate zones for Google Gemini / Veo sparkle logos
-      const searchZones = isVertical ? [
-        { minX: Math.round(vidW * 0.76), maxX: Math.round(vidW * 0.98), minY: Math.round(vidH * 0.50), maxY: Math.round(vidH * 0.68), name: 'Letterbox Center BR' },
-        { minX: Math.round(vidW * 0.76), maxX: Math.round(vidW * 0.98), minY: Math.round(vidH * 0.78), maxY: Math.round(vidH * 0.98), name: 'Bottom-Right Full' },
-        { minX: Math.round(vidW * 0.02), maxX: Math.round(vidW * 0.24), minY: Math.round(vidH * 0.50), maxY: Math.round(vidH * 0.68), name: 'Letterbox Center BL' },
-      ] : [
-        { minX: Math.round(vidW * 0.78), maxX: Math.round(vidW * 0.98), minY: Math.round(vidH * 0.70), maxY: Math.round(vidH * 0.98), name: 'Bottom-Right' },
-        { minX: Math.round(vidW * 0.78), maxX: Math.round(vidW * 0.98), minY: Math.round(vidH * 0.02), maxY: Math.round(vidH * 0.25), name: 'Top-Right' },
-        { minX: Math.round(vidW * 0.02), maxX: Math.round(vidW * 0.22), minY: Math.round(vidH * 0.70), maxY: Math.round(vidH * 0.98), name: 'Bottom-Left' },
-      ];
-
-      let bestMatch = null;
-      let maxStarScore = 0;
-
-      for (const zone of searchZones) {
-        const zw = zone.maxX - zone.minX;
-        const zh = zone.maxY - zone.minY;
-        if (zw <= 0 || zh <= 0) continue;
-
-        const imgData = ctx.getImageData(zone.minX, zone.minY, zw, zh);
-        const d = imgData.data;
-        const starR = Math.max(8, Math.min(18, Math.round(Math.min(vidW, vidH) * 0.015)));
-
-        for (let y = starR + 2; y < zh - starR - 2; y += 2) {
-          for (let x = starR + 2; x < zw - starR - 2; x += 2) {
-            const getLuma = (px, py) => {
-              const idx = (py * zw + px) * 4;
-              return 0.299 * d[idx] + 0.587 * d[idx + 1] + 0.114 * d[idx + 2];
-            };
-
-            const centerLuma = getLuma(x, y);
-            const armN = getLuma(x, y - Math.round(starR * 0.7));
-            const armS = getLuma(x, y + Math.round(starR * 0.7));
-            const armE = getLuma(x + Math.round(starR * 0.7), y);
-            const armW = getLuma(x - Math.round(starR * 0.7), y);
-            const avgArms = (armN + armS + armE + armW) / 4;
-
-            const diagNE = getLuma(x + Math.round(starR * 0.7), y - Math.round(starR * 0.7));
-            const diagNW = getLuma(x - Math.round(starR * 0.7), y - Math.round(starR * 0.7));
-            const diagSE = getLuma(x + Math.round(starR * 0.7), y + Math.round(starR * 0.7));
-            const diagSW = getLuma(x - Math.round(starR * 0.7), y + Math.round(starR * 0.7));
-            const avgDiags = (diagNE + diagNW + diagSE + diagSW) / 4;
-
-            const starScore = (centerLuma + avgArms * 1.6) - (avgDiags * 2.4);
-
-            if (starScore > maxStarScore && starScore > 30) {
-              maxStarScore = starScore;
-              bestMatch = {
-                centerX: zone.minX + x,
-                centerY: zone.minY + y,
-                score: starScore,
-                radius: starR
-              };
-            }
-          }
-        }
-      }
-
-      if (bestMatch) {
-        // Tight zero-blur fit
-        const tightW = Math.max(22, Math.min(36, Math.round(bestMatch.radius * 2.0)));
-        const tightH = Math.max(24, Math.min(40, Math.round(bestMatch.radius * 2.2)));
-        const boxX = Math.max(1, Math.min(vidW - tightW - 1, Math.round(bestMatch.centerX - tightW / 2)));
-        const boxY = Math.max(1, Math.min(vidH - tightH - 1, Math.round(bestMatch.centerY - tightH / 2)));
-
-        const detectedBox = {
-          id: activeBoxId || 1,
-          x: boxX,
-          y: boxY,
-          width: tightW,
-          height: tightH
-        };
-
-        setBoxes([detectedBox]);
-        setActiveBoxId(detectedBox.id);
-        pushState([detectedBox]);
-        setAiDetectionMessage('✦ Gemini Star detected & fitted with Zero-Blur precision!');
-        setTimeout(() => setAiDetectionMessage(null), 4000);
-      } else {
-        // Fallback to high-precision tight preset
-        const fallback = calcCornerBox('bottom-right-sparkle-tight');
-        const detectedBox = { id: activeBoxId || 1, ...fallback };
-        setBoxes([detectedBox]);
-        setActiveBoxId(detectedBox.id);
-        pushState([detectedBox]);
-        setAiDetectionMessage('✦ Applied Zero-Blur Gemini Star tight bounds.');
-        setTimeout(() => setAiDetectionMessage(null), 4000);
-      }
-    } catch (err) {
-      console.warn('AI detect error:', err);
-      const fallback = calcCornerBox('bottom-right-sparkle-tight');
-      setBoxes([{ id: 1, ...fallback }]);
-    } finally {
-      setIsScanningAi(false);
-    }
-  };
-
-  // Calculate default Gemini sparkle logo size & position (tight zero-blur dimensions)
-  const calcCornerBox = (corner = 'bottom-right-sparkle-tight') => {
-    const isVertical = vidH > vidW;
-
-    if (corner === 'bottom-right-sparkle-tight' || corner === 'bottom-right-sparkle') {
-      if (isVertical) {
-        // Tight zero-blur box for vertical video with letterboxed 16:9 content
-        const w = Math.max(26, Math.round(vidW * 0.030));
-        const h = Math.max(30, Math.round(vidH * 0.020));
-        const x = Math.round(vidW * 0.89);
-        const y = Math.round(vidH * 0.588);
-        return { x, y, width: w, height: h };
-      } else {
-        // Landscape 16:9 video - tight box
-        const w = Math.max(26, Math.round(vidW * 0.028));
-        const h = Math.max(30, Math.round(vidH * 0.045));
-        const x = Math.round(vidW * 0.89);
-        const y = Math.round(vidH * 0.81);
-        return { x, y, width: w, height: h };
-      }
-    }
-
-    if (corner === 'bottom-right-sparkle-full') {
-      const w = Math.max(28, Math.round(vidW * 0.032));
-      const h = Math.max(32, Math.round(vidH * 0.022));
-      const x = Math.round(vidW * 0.87);
-      const y = Math.round(vidH * 0.90);
-      return { x, y, width: w, height: h };
-    }
-
-    if (corner === 'bottom-right-corner') {
-      const size = Math.max(32, Math.round(vidW * 0.035));
-      const pad = Math.round(vidW * 0.02);
-      return { x: vidW - size - pad, y: vidH - size - pad, width: size, height: size };
-    }
-
-    const w = Math.max(45, Math.round(vidW * 0.07));
-    const h = Math.max(22, Math.round(w * 0.35));
-    const padX = Math.round(vidW * 0.02);
-    const padY = Math.round(vidH * 0.025);
-
-    switch (corner) {
+    switch (position) {
       case 'top-right':
-        return { x: vidW - w - padX, y: padY, width: w, height: h };
-      case 'bottom-right':
-        return { x: vidW - w - padX, y: vidH - h - padY, width: w, height: h };
+        return { x: vidW - baseW - padX, y: padY, width: baseW, height: baseH };
       case 'bottom-left':
-        return { x: padX, y: vidH - h - padY, width: w, height: h };
+        return { x: padX, y: vidH - baseH - padY, width: baseW, height: baseH };
       case 'top-left':
-        return { x: padX, y: padY, width: w, height: h };
+        return { x: padX, y: padY, width: baseW, height: baseH };
+      case 'bottom-right':
       default:
-        return { x: Math.round(vidW * 0.89), y: Math.round(vidH * 0.588), width: 28, height: 32 };
+        return { x: vidW - baseW - padX, y: vidH - baseH - padY, width: baseW, height: baseH };
     }
   };
 
-  // MULTI-AREA BOXES STATE (default to tight zero-blur fit)
+  // MULTI-AREA BOXES STATE (default to 1 small compact box)
   const [boxes, setBoxes] = useState(() => [
-    { id: 1, ...calcCornerBox('bottom-right-sparkle-tight') }
+    { id: 1, ...calcDefaultBox('bottom-right') }
   ]);
   const [activeBoxId, setActiveBoxId] = useState(1);
-  const [history, setHistory] = useState([[ { id: 1, ...calcCornerBox('bottom-right-sparkle-tight') } ]]);
+  const [history, setHistory] = useState([[ { id: 1, ...calcDefaultBox('bottom-right') } ]]);
   const [historyIndex, setHistoryIndex] = useState(0);
 
-  // Dragging state
+  // Dragging & Resizing state
   const [isDragging, setIsDragging] = useState(false);
   const [dragHandle, setDragHandle] = useState(null);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0, boxX: 0, boxY: 0, boxW: 0, boxH: 0 });
 
-  // Engine and filter tuning (default to ultra-clean zero-blur)
-  const [feather, setFeather] = useState(1);
+  // Engine: default to ultra_clean delogo inpainting
   const [selectedEngine, setSelectedEngine] = useState('ultra_clean');
 
   // Push history state
@@ -225,14 +74,15 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
   // Add a new removal box
   const handleAddNewBox = () => {
     const nextId = boxes.length > 0 ? Math.max(...boxes.map(b => b.id)) + 1 : 1;
-    // Default position slightly offset from previous
-    const offset = (boxes.length * 30) % 150;
+    const offset = (boxes.length * 25) % 120;
+    const baseSize = Math.max(32, Math.min(48, Math.round(Math.min(vidW, vidH) * 0.05)));
+
     const newBox = {
       id: nextId,
-      x: Math.max(10, Math.min(vidW - 80, 50 + offset)),
-      y: Math.max(10, Math.min(vidH - 50, 50 + offset)),
-      width: Math.max(30, Math.round(vidW * 0.08)),
-      height: Math.max(26, Math.round(vidH * 0.06))
+      x: Math.max(10, Math.min(vidW - baseSize - 10, vidW / 2 - baseSize / 2 + offset)),
+      y: Math.max(10, Math.min(vidH - baseSize - 10, vidH / 2 - baseSize / 2 + offset)),
+      width: baseSize,
+      height: baseSize
     };
 
     const newBoxes = [...boxes, newBox];
@@ -260,18 +110,29 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
     pushState(empty);
   };
 
-  const applyPreset = (corner) => {
-    const cornerCoords = calcCornerBox(corner);
+  const applyPresetPosition = (position) => {
+    const coords = calcDefaultBox(position);
     if (boxes.length === 0) {
-      const newBox = { id: 1, ...cornerCoords };
+      const newBox = { id: 1, ...coords };
       setBoxes([newBox]);
       setActiveBoxId(1);
       pushState([newBox]);
       return;
     }
 
-    // Update currently active box or add if corner doesn't exist
-    const newBoxes = boxes.map(b => (b.id === activeBoxId ? { ...b, ...cornerCoords } : b));
+    const newBoxes = boxes.map(b => (b.id === activeBoxId ? { ...b, ...coords } : b));
+    setBoxes(newBoxes);
+    pushState(newBoxes);
+  };
+
+  const setBoxFixedSize = (targetW, targetH) => {
+    const activeBox = boxes.find(b => b.id === activeBoxId);
+    if (!activeBox) return;
+
+    const w = Math.max(16, Math.min(vidW - activeBox.x, targetW));
+    const h = Math.max(16, Math.min(vidH - activeBox.y, targetH));
+
+    const newBoxes = boxes.map(b => b.id === activeBoxId ? { ...b, width: w, height: h } : b);
     setBoxes(newBoxes);
     pushState(newBoxes);
   };
@@ -284,6 +145,18 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
     const newH = Math.max(16, Math.min(vidH - activeBox.y, activeBox.height + delta));
     
     const newBoxes = boxes.map(b => b.id === activeBoxId ? { ...b, width: newW, height: newH } : b);
+    setBoxes(newBoxes);
+    pushState(newBoxes);
+  };
+
+  const nudgeActiveBox = (dx, dy) => {
+    const activeBox = boxes.find(b => b.id === activeBoxId);
+    if (!activeBox) return;
+
+    const newX = Math.max(0, Math.min(vidW - activeBox.width, activeBox.x + dx));
+    const newY = Math.max(0, Math.min(vidH - activeBox.height, activeBox.y + dy));
+
+    const newBoxes = boxes.map(b => b.id === activeBoxId ? { ...b, x: newX, y: newY } : b);
     setBoxes(newBoxes);
     pushState(newBoxes);
   };
@@ -451,52 +324,48 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
     }
   };
 
-  // Click / Tap on background canvas to add new area
+  // Click on canvas background to reposition active box
   const handleContainerPointerDown = (e) => {
     if (isDragging) return;
     const metrics = getRenderMetrics();
     const pos = getPointerPos(e);
-    const clickX = (pos.clientX - metrics.rect.left - metrics.offsetX) / (metrics.scaleX * zoomLevel);
-    const clickY = (pos.clientY - metrics.rect.top - metrics.offsetY) / (metrics.scaleY * zoomLevel);
+
+    const clickX = (pos.clientX - metrics.rect.left - metrics.offsetX) / metrics.scaleX;
+    const clickY = (pos.clientY - metrics.rect.top - metrics.offsetY) / metrics.scaleY;
 
     if (clickX < 0 || clickX > vidW || clickY < 0 || clickY > vidH) return;
 
-    const nextId = boxes.length > 0 ? Math.max(...boxes.map(b => b.id)) + 1 : 1;
-    const boxW = Math.max(26, Math.round(vidW * 0.030));
-    const boxH = Math.max(30, Math.round(vidH * 0.020));
-    
-    const newBox = {
-      id: nextId,
-      x: Math.max(0, Math.min(vidW - boxW, clickX - (boxW / 2))),
-      y: Math.max(0, Math.min(vidH - boxH, clickY - (boxH / 2))),
-      width: boxW,
-      height: boxH
-    };
-
-    const newBoxes = [...boxes, newBox];
-    setBoxes(newBoxes);
-    setActiveBoxId(nextId);
-    pushState(newBoxes);
+    if (boxes.length === 0) {
+      const baseSize = 36;
+      const newBox = {
+        id: 1,
+        x: Math.max(0, Math.min(vidW - baseSize, clickX - baseSize / 2)),
+        y: Math.max(0, Math.min(vidH - baseSize, clickY - baseSize / 2)),
+        width: baseSize,
+        height: baseSize
+      };
+      setBoxes([newBox]);
+      setActiveBoxId(1);
+      pushState([newBox]);
+    } else if (activeBoxId) {
+      const targetBox = boxes.find(b => b.id === activeBoxId);
+      if (targetBox) {
+        const updated = {
+          ...targetBox,
+          x: Math.max(0, Math.min(vidW - targetBox.width, clickX - targetBox.width / 2)),
+          y: Math.max(0, Math.min(vidH - targetBox.height, clickY - targetBox.height / 2))
+        };
+        const newBoxes = boxes.map(b => b.id === activeBoxId ? updated : b);
+        setBoxes(newBoxes);
+        pushState(newBoxes);
+      }
+    }
   };
-
-  // 1-Pixel Precision Nudge for Mobile & Desktop
-  const nudgeActiveBox = (dx, dy) => {
-    const activeBox = boxes.find(b => b.id === activeBoxId);
-    if (!activeBox) return;
-    const newX = Math.max(0, Math.min(vidW - activeBox.width, activeBox.x + dx));
-    const newY = Math.max(0, Math.min(vidH - activeBox.height, activeBox.y + dy));
-    const newBoxes = boxes.map(b => b.id === activeBoxId ? { ...b, x: newX, y: newY } : b);
-    setBoxes(newBoxes);
-    pushState(newBoxes);
-  };
-
-  const metrics = getRenderMetrics();
 
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
-    const ms = Math.floor((seconds % 1) * 100);
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   const handleStartRemoval = () => {
@@ -512,13 +381,13 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
         y: Math.round(b.y),
         width: Math.round(b.width),
         height: Math.round(b.height),
-        type: 'rect',
-        feather: feather
+        type: 'rect'
       })),
       engine: selectedEngine
     });
   };
 
+  const metrics = getRenderMetrics();
   const activeBox = boxes.find(b => b.id === activeBoxId);
 
   return (
@@ -554,7 +423,7 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
           </div>
         </div>
 
-        {/* Quick Toolbar */}
+        {/* Quick History Controls */}
         <div className="flex items-center gap-2 self-end sm:self-auto">
           <button
             onClick={handleUndo}
@@ -582,91 +451,65 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
         </div>
       </div>
 
-      {/* MULTI-AREA SELECTION & WATERMARK PRESETS */}
-      <div className="mb-6 p-4 rounded-2xl glass-panel border border-brand-500/30 bg-gradient-to-r from-brand-950/80 via-dark-900/90 to-dark-850/80 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      {/* QUICK PRESET & POSITION BAR */}
+      <div className="mb-6 p-4 rounded-2xl glass-panel border border-white/10 bg-dark-900/90 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-500 to-brand-cyan p-[1px] shrink-0">
-            <div className="w-full h-full bg-dark-900 rounded-[11px] flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-brand-cyan animate-pulse" />
-            </div>
+          <div className="w-9 h-9 rounded-xl bg-brand-500/20 border border-brand-500/30 flex items-center justify-center shrink-0">
+            <Move className="w-4 h-4 text-brand-cyan" />
           </div>
           <div>
             <h4 className="text-sm font-bold text-white flex items-center gap-2">
-              <span>AI Auto-Detect & Precision Fit</span>
+              <span>Watermark Box Position & Size</span>
               <span className="px-2 py-0.2 text-[9px] font-bold bg-brand-cyan/20 text-brand-cyan border border-brand-cyan/30 rounded uppercase">
-                {boxes.length} {boxes.length === 1 ? 'Area' : 'Areas'} Active
+                {boxes.length} {boxes.length === 1 ? 'Area' : 'Areas'}
               </span>
             </h4>
             <p className="text-xs text-slate-300">
-              Click <b>AI Auto-Detect</b> to automatically pinpoint the Gemini star, or tap a Zero-Blur preset:
+              Drag the box directly over the logo, or tap a corner to snap:
             </p>
           </div>
         </div>
 
-        {/* Action Controls & Presets */}
+        {/* Quick Position Snap Presets */}
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-          {/* AI Auto-Detect Gemini Watermark Button */}
           <button
-            onClick={detectGeminiWatermark}
-            disabled={isScanningAi}
-            className="px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-brand-500 via-brand-cyan to-indigo-500 hover:from-brand-400 hover:to-indigo-400 text-white shadow-lg shadow-brand-500/30 hover:scale-105 active:scale-95 transition-all flex items-center gap-2 group cursor-pointer"
-            title="Automatically scan and lock onto the Gemini 4-point star watermark"
+            onClick={() => applyPresetPosition('bottom-right')}
+            className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-dark-800 hover:bg-dark-700 text-brand-300 border border-brand-500/30 hover:border-brand-400 transition-all"
           >
-            <Wand2 className={`w-4 h-4 text-white ${isScanningAi ? 'animate-spin' : 'group-hover:rotate-12 transition-transform'}`} />
-            <span>{isScanningAi ? 'AI Scanning...' : '✦ AI Auto-Detect Star'}</span>
+            📍 Bottom-Right
           </button>
-
-          {/* Add Area Button */}
+          <button
+            onClick={() => applyPresetPosition('top-right')}
+            className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-dark-800 hover:bg-dark-700 text-slate-300 border border-white/10 hover:border-brand-500/40 transition-all"
+          >
+            📍 Top-Right
+          </button>
+          <button
+            onClick={() => applyPresetPosition('bottom-left')}
+            className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-dark-800 hover:bg-dark-700 text-slate-300 border border-white/10 hover:border-brand-500/40 transition-all"
+          >
+            📍 Bottom-Left
+          </button>
+          <button
+            onClick={() => applyPresetPosition('top-left')}
+            className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-dark-800 hover:bg-dark-700 text-slate-300 border border-white/10 hover:border-brand-500/40 transition-all"
+          >
+            📍 Top-Left
+          </button>
           <button
             onClick={handleAddNewBox}
-            className="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600/90 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-1.5"
+            className="px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-600/90 hover:bg-emerald-500 text-white shadow transition-all flex items-center gap-1"
           >
-            <Plus className="w-4 h-4" />
-            <span>Add Area (+1)</span>
-          </button>
-
-          <button
-            onClick={() => applyPreset('bottom-right-sparkle-tight')}
-            className="px-3 py-2 rounded-xl text-xs font-semibold bg-dark-900 hover:bg-dark-800 text-brand-300 border border-brand-500/30 hover:border-brand-400 transition-all flex items-center gap-1.5"
-            title="Tight bounding box to prevent background smearing/blur"
-          >
-            <Sparkle className="w-3.5 h-3.5 text-brand-cyan" />
-            <span>✦ Gemini (Tight Fit)</span>
-          </button>
-
-          <button
-            onClick={() => applyPreset('bottom-right-sparkle-full')}
-            className="px-3 py-2 rounded-xl text-xs font-semibold bg-dark-900 hover:bg-dark-800 text-slate-300 border border-white/10 hover:border-brand-500/40 transition-all"
-          >
-            <span>Gemini (9:16 Full)</span>
-          </button>
-
-          <button
-            onClick={() => applyPreset('top-right')}
-            className="px-3 py-2 rounded-xl text-xs font-semibold bg-dark-900 hover:bg-dark-800 text-slate-300 border border-white/10 hover:border-brand-500/40 transition-all"
-          >
-            <span>Top-Right</span>
+            <Plus className="w-3.5 h-3.5" />
+            <span>+ Add Box</span>
           </button>
         </div>
       </div>
 
-      {/* AI Detection Toast Notice */}
-      {aiDetectionMessage && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
-          className="mb-4 p-3 rounded-xl bg-gradient-to-r from-brand-900/90 via-dark-900 to-brand-950 border border-brand-cyan/40 text-xs font-semibold text-brand-200 flex items-center gap-2 shadow-lg"
-        >
-          <Sparkles className="w-4 h-4 text-brand-cyan animate-spin-slow shrink-0" />
-          <span>{aiDetectionMessage}</span>
-        </motion.div>
-      )}
-
       {/* Main Studio Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         
-        {/* Left Column: Interactive Video Player with Multi-Area Overlays */}
+        {/* Left Column: Interactive Video/Image Canvas with Multi-Area Overlays */}
         <div className="lg:col-span-8 flex flex-col gap-4">
           <div 
             ref={containerRef}
@@ -676,12 +519,12 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
             <div className="w-full flex items-center justify-between pb-2 px-2 text-xs font-mono text-slate-400 border-b border-white/5">
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-brand-cyan animate-pulse"></span>
-                <span>Active Area: #{activeBoxId || 'None'} ({boxes.length} Total)</span>
+                <span>Active Box: #{activeBoxId || 'None'}</span>
               </div>
               {activeBox && (
                 <div className="flex items-center gap-3">
                   <span>X: {Math.round(activeBox.x)} Y: {Math.round(activeBox.y)}</span>
-                  <span>W: {Math.round(activeBox.width)} H: {Math.round(activeBox.height)}</span>
+                  <span className="text-brand-300 font-bold">W: {Math.round(activeBox.width)} H: {Math.round(activeBox.height)}px</span>
                 </div>
               )}
             </div>
@@ -742,8 +585,8 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
                     onTouchStart={(e) => handlePointerDown(e, 'move', b.id)}
                     className={`absolute cursor-move transition-shadow duration-150 select-none ${
                       isActive
-                        ? 'border-2 border-brand-cyan bg-brand-cyan/10 shadow-[0_0_15px_rgba(6,182,212,0.6)] z-20'
-                        : 'border border-dashed border-slate-300/60 bg-white/5 hover:border-brand-400 z-10'
+                        ? 'border-2 border-brand-cyan bg-brand-cyan/20 shadow-[0_0_15px_rgba(6,182,212,0.7)] z-20'
+                        : 'border border-dashed border-slate-300/60 bg-white/10 hover:border-brand-400 z-10'
                     }`}
                   >
                     {/* Area Badge */}
@@ -751,7 +594,7 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
                       #{idx + 1}
                     </div>
 
-                    {/* Active Floating Delete Button Directly on Box */}
+                    {/* Active Floating Delete Button */}
                     {isActive && (
                       <button
                         onMouseDown={(e) => {
@@ -762,43 +605,43 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
                           e.stopPropagation();
                           handleDeleteActiveBox(b.id);
                         }}
-                        className="absolute -top-4 -right-4 w-6 h-6 rounded-full bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center shadow-xl border-2 border-white cursor-pointer z-30 transition-transform hover:scale-110 active:scale-95"
-                        title="Delete this selected area"
+                        className="absolute -top-3.5 -right-3.5 w-6 h-6 rounded-full bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center shadow-xl border-2 border-white cursor-pointer z-30 transition-transform hover:scale-110 active:scale-95"
+                        title="Delete box"
                       >
-                        <X className="w-3.5 h-3.5 stroke-[3]" />
+                        <X className="w-3 h-3 stroke-[3]" />
                       </button>
                     )}
 
-                    {/* Active Corner Handles (Finger-Friendly Touch Hitboxes) */}
+                    {/* Active Corner Handles for Resizing */}
                     {isActive && (
                       <>
                         <div
                           onMouseDown={(e) => handlePointerDown(e, 'nw', b.id)}
                           onTouchStart={(e) => handlePointerDown(e, 'nw', b.id)}
-                          className="absolute -top-2.5 -left-2.5 w-6 h-6 flex items-center justify-center cursor-nwse-resize z-30"
+                          className="absolute -top-3 -left-3 w-7 h-7 flex items-center justify-center cursor-nwse-resize z-30"
                         >
-                          <span className="w-3 h-3 rounded-full bg-brand-cyan border-2 border-white shadow-md"></span>
+                          <span className="w-3.5 h-3.5 rounded-full bg-brand-cyan border-2 border-white shadow-md"></span>
                         </div>
                         <div
                           onMouseDown={(e) => handlePointerDown(e, 'ne', b.id)}
                           onTouchStart={(e) => handlePointerDown(e, 'ne', b.id)}
-                          className="absolute -top-2.5 -right-2.5 w-6 h-6 flex items-center justify-center cursor-nesw-resize z-30"
+                          className="absolute -top-3 -right-3 w-7 h-7 flex items-center justify-center cursor-nesw-resize z-30"
                         >
-                          <span className="w-3 h-3 rounded-full bg-brand-cyan border-2 border-white shadow-md"></span>
+                          <span className="w-3.5 h-3.5 rounded-full bg-brand-cyan border-2 border-white shadow-md"></span>
                         </div>
                         <div
                           onMouseDown={(e) => handlePointerDown(e, 'sw', b.id)}
                           onTouchStart={(e) => handlePointerDown(e, 'sw', b.id)}
-                          className="absolute -bottom-2.5 -left-2.5 w-6 h-6 flex items-center justify-center cursor-nesw-resize z-30"
+                          className="absolute -bottom-3 -left-3 w-7 h-7 flex items-center justify-center cursor-nesw-resize z-30"
                         >
-                          <span className="w-3 h-3 rounded-full bg-brand-cyan border-2 border-white shadow-md"></span>
+                          <span className="w-3.5 h-3.5 rounded-full bg-brand-cyan border-2 border-white shadow-md"></span>
                         </div>
                         <div
                           onMouseDown={(e) => handlePointerDown(e, 'se', b.id)}
                           onTouchStart={(e) => handlePointerDown(e, 'se', b.id)}
-                          className="absolute -bottom-2.5 -right-2.5 w-6 h-6 flex items-center justify-center cursor-nwse-resize z-30"
+                          className="absolute -bottom-3 -right-3 w-7 h-7 flex items-center justify-center cursor-nwse-resize z-30"
                         >
-                          <span className="w-3 h-3 rounded-full bg-brand-cyan border-2 border-white shadow-md"></span>
+                          <span className="w-3.5 h-3.5 rounded-full bg-brand-cyan border-2 border-white shadow-md"></span>
                         </div>
                       </>
                     )}
@@ -807,35 +650,35 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
               })}
             </div>
 
-            {/* Mobile & Touch Precision D-Pad Nudge Controls */}
+            {/* Precision D-Pad Nudge & Size Controls */}
             {activeBox && (
               <div className="w-full mt-2.5 p-2 rounded-xl bg-dark-900/90 border border-white/5 flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-1">
-                  <span className="text-[11px] font-bold text-slate-300 mr-1">Nudge:</span>
+                  <span className="text-[11px] font-bold text-slate-300 mr-1">Move:</span>
                   <button 
                     onClick={() => nudgeActiveBox(0, -3)}
-                    className="w-8 h-8 rounded-lg bg-dark-800 hover:bg-dark-700 active:bg-brand-500 text-slate-200 flex items-center justify-center border border-white/10 font-bold"
+                    className="w-8 h-8 rounded-lg bg-dark-800 hover:bg-dark-700 active:bg-brand-500 text-slate-200 flex items-center justify-center border border-white/10 font-bold text-xs"
                     title="Nudge Up"
                   >
                     ⬆
                   </button>
                   <button 
                     onClick={() => nudgeActiveBox(0, 3)}
-                    className="w-8 h-8 rounded-lg bg-dark-800 hover:bg-dark-700 active:bg-brand-500 text-slate-200 flex items-center justify-center border border-white/10 font-bold"
+                    className="w-8 h-8 rounded-lg bg-dark-800 hover:bg-dark-700 active:bg-brand-500 text-slate-200 flex items-center justify-center border border-white/10 font-bold text-xs"
                     title="Nudge Down"
                   >
                     ⬇
                   </button>
                   <button 
                     onClick={() => nudgeActiveBox(-3, 0)}
-                    className="w-8 h-8 rounded-lg bg-dark-800 hover:bg-dark-700 active:bg-brand-500 text-slate-200 flex items-center justify-center border border-white/10 font-bold"
+                    className="w-8 h-8 rounded-lg bg-dark-800 hover:bg-dark-700 active:bg-brand-500 text-slate-200 flex items-center justify-center border border-white/10 font-bold text-xs"
                     title="Nudge Left"
                   >
                     ⬅
                   </button>
                   <button 
                     onClick={() => nudgeActiveBox(3, 0)}
-                    className="w-8 h-8 rounded-lg bg-dark-800 hover:bg-dark-700 active:bg-brand-500 text-slate-200 flex items-center justify-center border border-white/10 font-bold"
+                    className="w-8 h-8 rounded-lg bg-dark-800 hover:bg-dark-700 active:bg-brand-500 text-slate-200 flex items-center justify-center border border-white/10 font-bold text-xs"
                     title="Nudge Right"
                   >
                     ➡
@@ -843,19 +686,22 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
                 </div>
 
                 <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold text-slate-300 mr-1">Size:</span>
                   <button 
-                    onClick={() => adjustActiveBoxSize(-2)}
-                    className="px-2.5 py-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 active:bg-brand-500 text-slate-200 text-xs font-semibold border border-white/10"
+                    onClick={() => adjustActiveBoxSize(-4)}
+                    className="px-2.5 py-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 active:bg-brand-500 text-slate-200 text-xs font-semibold border border-white/10 flex items-center gap-1"
                     title="Shrink box"
                   >
-                    Shrink (-2)
+                    <Minimize2 className="w-3 h-3 text-brand-cyan" />
+                    <span>Shrink (-4)</span>
                   </button>
                   <button 
-                    onClick={() => adjustActiveBoxSize(2)}
-                    className="px-2.5 py-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 active:bg-brand-500 text-slate-200 text-xs font-semibold border border-white/10"
+                    onClick={() => adjustActiveBoxSize(4)}
+                    className="px-2.5 py-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 active:bg-brand-500 text-slate-200 text-xs font-semibold border border-white/10 flex items-center gap-1"
                     title="Expand box"
                   >
-                    Expand (+2)
+                    <Maximize2 className="w-3 h-3 text-brand-cyan" />
+                    <span>Expand (+4)</span>
                   </button>
                 </div>
               </div>
@@ -866,7 +712,7 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
               <div className="w-full mt-3 px-2 py-1.5 flex items-center justify-between text-xs text-slate-300 border-t border-white/5">
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                  <span className="text-slate-300 font-medium">Static Photo Studio • Drag or click to place watermark boxes</span>
+                  <span className="text-slate-300 font-medium">Photo Studio • Drag box over logo to remove</span>
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -942,14 +788,55 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
           </div>
         </div>
 
-        {/* Right Column: Selected Areas List & Engine Settings */}
+        {/* Right Column: Box Controls & Remove Button */}
         <div className="lg:col-span-4 flex flex-col gap-5">
           
+          {/* Quick Size Presets */}
+          <div className="glass-panel p-5 rounded-2xl border border-white/10">
+            <h3 className="text-sm font-bold text-white mb-2 flex items-center justify-between">
+              <span>Box Size Presets</span>
+              {activeBox && (
+                <span className="text-xs font-mono text-brand-300 font-bold">
+                  {Math.round(activeBox.width)}x{Math.round(activeBox.height)}px
+                </span>
+              )}
+            </h3>
+            <p className="text-xs text-slate-400 mb-3">
+              Keep the box small to avoid unnecessary blurring:
+            </p>
+
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                onClick={() => setBoxFixedSize(32, 34)}
+                className="py-2 px-2 rounded-xl bg-dark-900 hover:bg-dark-850 border border-brand-500/40 text-brand-200 text-xs font-semibold text-center hover:border-brand-400 transition-all"
+              >
+                <div className="text-[10px] text-slate-400">Icon / Star</div>
+                <div className="font-bold text-xs mt-0.5">Small (32px)</div>
+              </button>
+
+              <button
+                onClick={() => setBoxFixedSize(55, 55)}
+                className="py-2 px-2 rounded-xl bg-dark-900 hover:bg-dark-850 border border-white/10 text-slate-200 text-xs font-semibold text-center hover:border-brand-500/40 transition-all"
+              >
+                <div className="text-[10px] text-slate-400">Standard Logo</div>
+                <div className="font-bold text-xs mt-0.5">Medium (55px)</div>
+              </button>
+
+              <button
+                onClick={() => setBoxFixedSize(110, 38)}
+                className="py-2 px-2 rounded-xl bg-dark-900 hover:bg-dark-850 border border-white/10 text-slate-200 text-xs font-semibold text-center hover:border-brand-500/40 transition-all"
+              >
+                <div className="text-[10px] text-slate-400">Text Watermark</div>
+                <div className="font-bold text-xs mt-0.5">Wide (110x38)</div>
+              </button>
+            </div>
+          </div>
+
           {/* Areas List Manager */}
           <div className="glass-panel p-5 rounded-2xl border border-white/10">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <Target className="w-4 h-4 text-brand-cyan" />
+                <Layers className="w-4 h-4 text-brand-cyan" />
                 <span>Selected Areas ({boxes.length})</span>
               </h3>
               <button
@@ -957,12 +844,12 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
                 className="text-xs font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>Add Box</span>
+                <span>+ Add Area</span>
               </button>
             </div>
 
             {/* List of active box chips */}
-            <div className="space-y-2 max-h-40 overflow-y-auto pr-1 mb-3">
+            <div className="space-y-2 max-h-44 overflow-y-auto pr-1 mb-3">
               {boxes.map((b, idx) => {
                 const isActive = b.id === activeBoxId;
                 return (
@@ -1004,117 +891,26 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
             {activeBox && (
               <button
                 onClick={() => handleDeleteActiveBox(activeBoxId)}
-                className="w-full mb-3 py-2 px-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-xs font-semibold text-rose-300 hover:text-rose-200 transition-all flex items-center justify-center gap-1.5"
+                className="w-full py-2 px-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-xs font-semibold text-rose-300 hover:text-rose-200 transition-all flex items-center justify-center gap-1.5"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                <span>Delete Selected Area #{boxes.findIndex(b => b.id === activeBoxId) + 1}</span>
+                <span>Delete Selected Box #{boxes.findIndex(b => b.id === activeBoxId) + 1}</span>
               </button>
             )}
-
-            {/* Box Size Control for active area */}
-            {activeBox && (
-              <div className="pt-3 border-t border-white/5">
-                <div className="flex justify-between text-xs text-slate-300 mb-2">
-                  <span>Tighten Area #{boxes.findIndex(b => b.id === activeBoxId) + 1}</span>
-                  <span className="font-mono text-brand-300 font-bold">{Math.round(activeBox.width)}x{Math.round(activeBox.height)}px</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => adjustActiveBoxSize(-4)}
-                    className="flex-1 py-1.5 px-2 rounded-lg bg-dark-900 hover:bg-dark-800 border border-white/10 text-xs text-slate-300 hover:text-white flex items-center justify-center gap-1"
-                  >
-                    <Minimize2 className="w-3 h-3 text-brand-cyan" />
-                    <span>Shrink (-4px)</span>
-                  </button>
-                  <button
-                    onClick={() => adjustActiveBoxSize(4)}
-                    className="flex-1 py-1.5 px-2 rounded-lg bg-dark-900 hover:bg-dark-800 border border-white/10 text-xs text-slate-300 hover:text-white flex items-center justify-center gap-1"
-                  >
-                    <Maximize2 className="w-3 h-3 text-brand-violet" />
-                    <span>Expand (+4px)</span>
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Engine Selector */}
-          <div className="glass-panel p-5 rounded-2xl border border-white/10">
-            <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
-              <Wand2 className="w-4 h-4 text-brand-cyan" />
-              <span>Restoration Engine</span>
-            </h3>
-
-            <div className="space-y-2.5">
-              <label 
-                onClick={() => setSelectedEngine('texture_clone')}
-                className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
-                  selectedEngine === 'texture_clone'
-                    ? 'bg-brand-500/15 border-brand-500/50 text-white shadow-lg shadow-brand-500/10 ring-1 ring-brand-cyan/40'
-                    : 'bg-dark-900/40 border-white/5 text-slate-300 hover:bg-dark-900'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="engine"
-                  value="texture_clone"
-                  checked={selectedEngine === 'texture_clone'}
-                  onChange={() => setSelectedEngine('texture_clone')}
-                  className="mt-1 accent-brand-500"
-                />
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-white">Zero-Blur Texture Match</span>
-                    <span className="px-1.5 py-0.2 text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded">
-                      RECOMMENDED (NO BLUR)
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    Clones adjacent real road asphalt grain seamlessly without creating any blur smudges.
-                  </p>
-                </div>
-              </label>
-
-              <label 
-                onClick={() => setSelectedEngine('ultra_clean')}
-                className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
-                  selectedEngine === 'ultra_clean'
-                    ? 'bg-brand-500/15 border-brand-500/50 text-white shadow-lg shadow-brand-500/10'
-                    : 'bg-dark-900/40 border-white/5 text-slate-300 hover:bg-dark-900'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="engine"
-                  value="ultra_clean"
-                  checked={selectedEngine === 'ultra_clean'}
-                  onChange={() => setSelectedEngine('ultra_clean')}
-                  className="mt-1 accent-brand-500"
-                />
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-white">Micro Delogo Inpaint</span>
-                  </div>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    Edge interpolation for static graphics.
-                  </p>
-                </div>
-              </label>
-            </div>
           </div>
 
           {/* Action Trigger Button */}
           <div className="p-1">
             <button
               onClick={handleStartRemoval}
-              className="w-full py-4 px-6 rounded-2xl font-bold text-sm text-white bg-gradient-to-r from-brand-600 via-brand-500 to-brand-cyan hover:from-brand-500 hover:to-brand-400 shadow-xl shadow-brand-500/30 hover:shadow-brand-500/50 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 group"
+              className="w-full py-4 px-6 rounded-2xl font-bold text-sm text-white bg-gradient-to-r from-brand-600 via-brand-500 to-brand-cyan hover:from-brand-500 hover:to-brand-400 shadow-xl shadow-brand-500/30 hover:shadow-brand-500/50 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 group cursor-pointer"
             >
               <Sparkles className="w-5 h-5 text-white group-hover:rotate-12 transition-transform" />
-              <span>Remove {boxes.length > 1 ? `(${boxes.length} Areas)` : ''} & Restore {isImage ? 'Photo' : 'Video'}</span>
+              <span>Remove Watermark & Restore {isImage ? 'Photo' : 'Video'}</span>
             </button>
             <p className="text-[11px] text-center text-slate-400 mt-2.5 flex items-center justify-center gap-1">
               <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Processes all selected areas simultaneously</span>
+              <span>Instant, clean watermark removal</span>
             </p>
           </div>
 
@@ -1125,21 +921,11 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
       {/* MOBILE STICKY BOTTOM ACTION BAR (Shown only on small screens) */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 p-3 bg-dark-950/95 backdrop-blur-2xl border-t border-white/10 z-50 flex items-center gap-2 shadow-2xl safe-area-bottom">
         <button
-          onClick={detectGeminiWatermark}
-          disabled={isScanningAi}
-          className="px-3.5 py-3 rounded-xl bg-dark-900 border border-brand-cyan/40 text-brand-cyan font-bold text-xs flex items-center gap-1.5 shrink-0 active:scale-95 transition-transform"
-          title="AI Auto-Detect"
-        >
-          <Wand2 className={`w-4 h-4 ${isScanningAi ? 'animate-spin' : ''}`} />
-          <span>AI Detect</span>
-        </button>
-
-        <button
           onClick={handleStartRemoval}
-          className="flex-1 py-3 px-4 rounded-xl font-bold text-xs sm:text-sm text-white bg-gradient-to-r from-brand-500 via-brand-cyan to-indigo-500 shadow-lg shadow-brand-500/30 flex items-center justify-center gap-2 active:scale-95 transition-transform"
+          className="w-full py-3.5 px-4 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-brand-500 via-brand-cyan to-indigo-500 shadow-lg shadow-brand-500/30 flex items-center justify-center gap-2 active:scale-95 transition-transform"
         >
           <Sparkles className="w-4 h-4 text-white" />
-          <span>Start Restore {isImage ? 'Photo' : 'Video'} ➔</span>
+          <span>Remove Watermark & Restore ➔</span>
         </button>
       </div>
     </div>
