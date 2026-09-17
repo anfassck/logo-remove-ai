@@ -76,7 +76,7 @@ class RestorationEngine {
       .filter(m => m.w >= 4 && m.h >= 4);
 
     if (validMasks.length === 0) {
-      return `delogo=x=10:y=10:w=30:h=30:show=0`;
+      return `delogo=x=10:y=10:w=30:h=30`;
     }
 
     if (engineType === 'smart_blend') {
@@ -98,7 +98,7 @@ class RestorationEngine {
 
     // Ultra-clean high-reliability Delogo: removes transparent / opaque logos cleanly
     return validMasks
-      .map(m => `delogo=x=${m.x}:y=${m.y}:w=${m.w}:h=${m.h}:show=0`)
+      .map(m => `delogo=x=${m.x}:y=${m.y}:w=${m.w}:h=${m.h}`)
       .join(',');
   }
 
