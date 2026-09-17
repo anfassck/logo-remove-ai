@@ -182,6 +182,19 @@ export default function App() {
 
         {viewMode === 'editor' && videoData && (
           <section id="studio-section" className="py-8">
+            {errorMessage && (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-4">
+                <div className="p-4 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-200 text-sm font-semibold flex items-center justify-between shadow-lg">
+                  <span>⚠️ {errorMessage}</span>
+                  <button 
+                    onClick={() => setErrorMessage(null)} 
+                    className="ml-4 text-xs underline hover:text-white"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            )}
             <VideoEditor
               videoData={videoData}
               onProcess={handleStartProcess}

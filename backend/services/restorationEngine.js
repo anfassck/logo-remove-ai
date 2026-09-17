@@ -56,20 +56,24 @@ class RestorationEngine {
       }
     }
 
-    // Ensure valid, strictly clamped coordinates for FFmpeg delogo (must have 1px padding from video edges)
+    // Ensure valid, strictly clamped coordinates for FFmpeg delogo (must have >= 2px padding from all video edges)
     const validMasks = masks
       .map(m => {
-        let x = Math.max(1, Math.min(videoWidth - 8, Math.round(m.x || 0)));
-        let y = Math.max(1, Math.min(videoHeight - 8, Math.round(m.y || 0)));
-        let w = Math.max(8, Math.min(videoWidth - x - 2, Math.round(m.width || 36)));
-        let h = Math.max(8, Math.min(videoHeight - y - 2, Math.round(m.height || 36)));
+        let w = Math.max(6, Math.min(videoWidth - 6, Math.round(m.width || 32)));
+        let h = Math.max(6, Math.min(videoHeight - 6, Math.round(m.height || 32)));
+        let x = Math.max(2, Math.min(videoWidth - w - 2, Math.round(m.x || 2)));
+        let y = Math.max(2, Math.min(videoHeight - h - 2, Math.round(m.y || 2)));
 
-        if (w % 2 !== 0 && x + w < videoWidth - 1) w += 1;
-        if (h % 2 !== 0 && y + h < videoHeight - 1) h += 1;
+        if (x + w > videoWidth - 2) {
+          w = Math.max(4, videoWidth - x - 2);
+        }
+        if (y + h > videoHeight - 2) {
+          h = Math.max(4, videoHeight - y - 2);
+        }
 
         return { x, y, w, h };
       })
-      .filter(m => m.w >= 6 && m.h >= 6);
+      .filter(m => m.w >= 4 && m.h >= 4);
 
     if (validMasks.length === 0) {
       return `delogo=x=10:y=10:w=30:h=30:show=0`;
