@@ -144,7 +144,6 @@ class VideoProcessor {
         await new Promise((resolve, reject) => {
           ffmpeg(inputPath)
             .videoFilters(filterString)
-            .outputOptions(['-vframes 1', '-y'])
             .save(outputPath)
             .on('start', (cmdline) => {
               console.log(`[FFmpeg Image] Started: ${cmdline}`);
