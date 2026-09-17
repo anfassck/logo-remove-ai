@@ -139,7 +139,6 @@ export default function ComparisonView({ originalVideo, jobResult, onReset }) {
           {isImage ? (
             <img
               ref={restoredVidRef}
-              crossOrigin="anonymous"
               src={apiService.resolveMediaUrl(jobResult?.output?.imageUrl || jobResult?.output?.videoUrl)}
               alt="Restored Photo"
               className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
@@ -147,7 +146,6 @@ export default function ComparisonView({ originalVideo, jobResult, onReset }) {
           ) : (
             <video
               ref={restoredVidRef}
-              crossOrigin="anonymous"
               src={apiService.resolveMediaUrl(jobResult?.output?.videoUrl)}
               onTimeUpdate={handleTimeUpdate}
               onEnded={() => setIsPlaying(false)}
@@ -166,7 +164,6 @@ export default function ComparisonView({ originalVideo, jobResult, onReset }) {
             {isImage ? (
               <img
                 ref={originalVidRef}
-                crossOrigin="anonymous"
                 src={apiService.resolveMediaUrl(originalVideo?.imageUrl || originalVideo?.videoUrl)}
                 alt="Original Photo"
                 className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
@@ -178,7 +175,6 @@ export default function ComparisonView({ originalVideo, jobResult, onReset }) {
             ) : (
               <video
                 ref={originalVidRef}
-                crossOrigin="anonymous"
                 src={apiService.resolveMediaUrl(originalVideo?.videoUrl)}
                 loop
                 playsInline

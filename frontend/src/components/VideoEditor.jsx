@@ -542,7 +542,6 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
               {isImage ? (
                 <img
                   ref={videoRef}
-                  crossOrigin="anonymous"
                   src={apiService.resolveMediaUrl(videoData.imageUrl || videoData.videoUrl)}
                   alt={videoData.originalName || "Uploaded image"}
                   className="w-full h-full block object-contain pointer-events-none select-none"
@@ -550,7 +549,6 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
               ) : (
                 <video
                   ref={videoRef}
-                  crossOrigin="anonymous"
                   src={apiService.resolveMediaUrl(videoData.videoUrl)}
                   onTimeUpdate={handleTimeUpdate}
                   onLoadedMetadata={handleLoadedMetadata}
