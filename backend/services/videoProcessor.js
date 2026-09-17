@@ -144,7 +144,7 @@ class VideoProcessor {
         await new Promise((resolve, reject) => {
           ffmpeg(inputPath)
             .videoFilters(filterString)
-            .frames(1)
+            .outputOptions(['-update 1', '-frames:v 1', '-y'])
             .save(outputPath)
             .on('start', (cmdline) => {
               console.log(`[FFmpeg Image] Started: ${cmdline}`);
@@ -173,10 +173,12 @@ class VideoProcessor {
           command = command
             .videoCodec('libx264')
             .outputOptions([
-              '-preset fast',
-              '-crf 19',
+              '-preset veryfast',
+              '-crf 20',
+              '-threads 2',
               '-pix_fmt yuv420p',
-              '-movflags +faststart'
+              '-movflags +faststart',
+              '-max_muxing_queue_size 1024'
             ]);
 
           // Preserve or encode audio

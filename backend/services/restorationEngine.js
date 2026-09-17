@@ -92,7 +92,7 @@ class RestorationEngine {
       return filterSteps.join(';');
     }
 
-    // Standard high-reliability Delogo: removes transparent / opaque logos cleanly
+    // Ultra-clean high-reliability Delogo: removes transparent / opaque logos cleanly
     return validMasks
       .map(m => `delogo=x=${m.x}:y=${m.y}:w=${m.w}:h=${m.h}:show=0`)
       .join(',');

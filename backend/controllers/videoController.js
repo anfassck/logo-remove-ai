@@ -350,14 +350,20 @@ export const videoController = {
           'Content-Range': `bytes ${start}-${end}/${fileSize}`,
           'Accept-Ranges': 'bytes',
           'Content-Length': chunksize,
-          'Content-Type': contentType
+          'Content-Type': contentType,
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, OPTIONS',
+          'Cross-Origin-Resource-Policy': 'cross-origin'
         });
         fileStream.pipe(res);
       } else {
         res.writeHead(200, {
           'Content-Length': fileSize,
           'Content-Type': contentType,
-          'Accept-Ranges': 'bytes'
+          'Accept-Ranges': 'bytes',
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, OPTIONS',
+          'Cross-Origin-Resource-Policy': 'cross-origin'
         });
         fs.createReadStream(fullPath).pipe(res);
       }

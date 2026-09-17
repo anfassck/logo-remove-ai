@@ -67,20 +67,22 @@ export default function ComparisonView({ originalVideo, jobResult, onReset }) {
     if (restoredVidRef.current) restoredVidRef.current.muted = nextMuted;
   };
 
-  // Slider dragging logic
-  const handleMouseDown = () => {
+  // Slider dragging logic (Mouse & Touch)
+  const handlePointerDown = () => {
     setIsDraggingSlider(true);
   };
 
-  const handleMouseMove = (e) => {
+  const handlePointerMove = (e) => {
     if (!isDraggingSlider || !containerRef.current) return;
+    if (e.cancelable && e.type === 'touchmove') e.preventDefault();
     const rect = containerRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
+    const clientX = e.touches && e.touches.length > 0 ? e.touches[0].clientX : e.clientX;
+    const x = clientX - rect.left;
     const percent = Math.max(0, Math.min(100, (x / rect.width) * 100));
     setSliderPosition(percent);
   };
 
-  const handleMouseUp = () => {
+  const handlePointerUp = () => {
     setIsDraggingSlider(false);
   };
 
@@ -97,8 +99,10 @@ export default function ComparisonView({ originalVideo, jobResult, onReset }) {
   return (
     <div 
       className="w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 select-none"
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
+      onMouseMove={handlePointerMove}
+      onMouseUp={handlePointerUp}
+      onTouchMove={handlePointerMove}
+      onTouchEnd={handlePointerUp}
     >
       {/* Top Banner */}
       <motion.div 
@@ -124,15 +128,18 @@ export default function ComparisonView({ originalVideo, jobResult, onReset }) {
         <div 
           ref={containerRef}
           className="relative w-full max-h-[70vh] rounded-2xl overflow-hidden bg-black cursor-ew-resize"
+          onMouseDown={handlePointerDown}
+          onTouchStart={handlePointerDown}
           style={{
-            aspectRatio: `${jobResult?.output?.width || originalVideo?.width || 16} / ${jobResult?.output?.height || originalVideo?.height || 9}`
+            aspectRatio: `${jobResult?.output?.width || originalVideo?.width || 16} / ${jobResult?.output?.height || originalVideo?.height || 9}`,
+            touchAction: 'none'
           }}
-          onMouseDown={handleMouseDown}
         >
           {/* Layer 1: Restored (Full Background) */}
           {isImage ? (
             <img
               ref={restoredVidRef}
+              crossOrigin="anonymous"
               src={apiService.resolveMediaUrl(jobResult?.output?.imageUrl || jobResult?.output?.videoUrl)}
               alt="Restored Photo"
               className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
@@ -140,6 +147,7 @@ export default function ComparisonView({ originalVideo, jobResult, onReset }) {
           ) : (
             <video
               ref={restoredVidRef}
+              crossOrigin="anonymous"
               src={apiService.resolveMediaUrl(jobResult?.output?.videoUrl)}
               onTimeUpdate={handleTimeUpdate}
               onEnded={() => setIsPlaying(false)}
@@ -158,6 +166,7 @@ export default function ComparisonView({ originalVideo, jobResult, onReset }) {
             {isImage ? (
               <img
                 ref={originalVidRef}
+                crossOrigin="anonymous"
                 src={apiService.resolveMediaUrl(originalVideo?.imageUrl || originalVideo?.videoUrl)}
                 alt="Original Photo"
                 className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
@@ -169,6 +178,7 @@ export default function ComparisonView({ originalVideo, jobResult, onReset }) {
             ) : (
               <video
                 ref={originalVidRef}
+                crossOrigin="anonymous"
                 src={apiService.resolveMediaUrl(originalVideo?.videoUrl)}
                 loop
                 playsInline

@@ -83,10 +83,45 @@ async function runTest() {
     strategy: outputResult.strategy
   });
 
-  const finalJob = jobManager.getJob(job.jobId);
-  console.log('✓ Final job status:', finalJob.status, 'Progress:', finalJob.progress);
+  // 5. Test Image Restoration Flow
+  console.log('Step 5: Testing image restoration job...');
+  const inputImageSample = path.join(testDir, 'test_image.png');
+  await new Promise((resolve, reject) => {
+    ffmpeg()
+      .input('color=c=green:s=800x600:d=1')
+      .inputFormat('lavfi')
+      .videoFilters([
+        'drawbox=x=600:y=450:w=120:h=80:color=white@0.9:t=fill'
+      ])
+      .outputOptions(['-update 1', '-frames:v 1', '-y'])
+      .output(inputImageSample)
+      .on('end', resolve)
+      .on('error', reject)
+      .run();
+  });
 
-  console.log('--- ALL BACKEND VERIFICATIONS PASSED ---');
+  const imageJob = jobManager.createJob({
+    input: {
+      fileId: 'test_img_job',
+      filepath: inputImageSample,
+      filename: 'test_image.png',
+      mediaType: 'image'
+    },
+    maskData: {
+      masks: [{ x: 600, y: 450, width: 120, height: 80, type: 'rect' }]
+    },
+    engine: 'ultra_clean'
+  });
+
+  const imageResult = await videoProcessor.processJob(imageJob.jobId);
+  console.log('✓ Image restoration completed successfully!');
+  console.log('✓ Image output result:', {
+    filename: imageResult.filename,
+    filepath: imageResult.filepath,
+    size: imageResult.size
+  });
+
+  console.log('--- ALL BACKEND VERIFICATIONS (VIDEO + PHOTO) PASSED ---');
 }
 
 runTest().catch(err => {
