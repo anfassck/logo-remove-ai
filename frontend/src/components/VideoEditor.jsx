@@ -66,12 +66,10 @@ export default function VideoEditor({ videoData, onProcess, onReset, onAutoClean
     }
   };
 
-  // MULTI-AREA BOXES STATE (default to 1 small compact box)
-  const [boxes, setBoxes] = useState(() => [
-    { id: 1, ...calcDefaultBox('bottom-right') }
-  ]);
-  const [activeBoxId, setActiveBoxId] = useState(1);
-  const [history, setHistory] = useState([[ { id: 1, ...calcDefaultBox('bottom-right') } ]]);
+  // MULTI-AREA BOXES STATE (default to 0 boxes - 100% automatic zero-blur by default)
+  const [boxes, setBoxes] = useState([]);
+  const [activeBoxId, setActiveBoxId] = useState(null);
+  const [history, setHistory] = useState([[]]);
   const [historyIndex, setHistoryIndex] = useState(0);
 
   // Dragging & Resizing state
@@ -79,8 +77,8 @@ export default function VideoEditor({ videoData, onProcess, onReset, onAutoClean
   const [dragHandle, setDragHandle] = useState(null);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0, boxX: 0, boxY: 0, boxW: 0, boxH: 0 });
 
-  // Engine: default to ultra_clean delogo inpainting
-  const [selectedEngine, setSelectedEngine] = useState('ultra_clean');
+  // Engine: default to gemini_zero_blur for 100% zero blur restoration
+  const [selectedEngine, setSelectedEngine] = useState('gemini_zero_blur');
 
   // Push history state
   const pushState = (newBoxes) => {
@@ -365,8 +363,13 @@ export default function VideoEditor({ videoData, onProcess, onReset, onAutoClean
   };
 
   const handleStartRemoval = () => {
+    // If no boxes are placed, automatically run zero-blur reverse alpha blending!
     if (boxes.length === 0) {
-      alert('Please select at least one area over the watermark before processing.');
+      onProcess({
+        filename: videoData.filename,
+        masks: [],
+        engine: 'gemini_zero_blur'
+      });
       return;
     }
 
@@ -541,10 +544,17 @@ export default function VideoEditor({ videoData, onProcess, onReset, onAutoClean
           >
             {/* Top Toolbar Overlay */}
             <div className="w-full flex items-center justify-between pb-2 px-2 text-xs font-mono text-slate-400 border-b border-white/5">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-brand-cyan animate-pulse"></span>
-                <span>Active Box: #{activeBoxId || 'None'}</span>
-              </div>
+              {boxes.length === 0 ? (
+                <div className="flex items-center gap-2 text-emerald-400 font-semibold">
+                  <Sparkles className="w-3.5 h-3.5 animate-pulse text-emerald-400" />
+                  <span>AI Auto-Detect Active (Zero Blur — No Square Box Needed)</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-brand-cyan animate-pulse"></span>
+                  <span>Active Box: #{activeBoxId || 'None'}</span>
+                </div>
+              )}
               {activeBox && (
                 <div className="flex items-center gap-3">
                   <span>X: {Math.round(activeBox.x)} Y: {Math.round(activeBox.y)}</span>
@@ -873,44 +883,56 @@ export default function VideoEditor({ videoData, onProcess, onReset, onAutoClean
               </button>
             </div>
 
-            {/* List of active box chips */}
-            <div className="space-y-2 max-h-44 overflow-y-auto pr-1 mb-3">
-              {boxes.map((b, idx) => {
-                const isActive = b.id === activeBoxId;
-                return (
-                  <div
-                    key={b.id}
-                    onClick={() => setActiveBoxId(b.id)}
-                    className={`flex items-center justify-between p-2.5 rounded-xl border cursor-pointer transition-all ${
-                      isActive
-                        ? 'bg-brand-500/20 border-brand-500/50 text-white'
-                        : 'bg-dark-900/60 border-white/5 text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="w-5 h-5 rounded-full bg-dark-950 border border-brand-cyan/40 text-[10px] font-mono font-bold text-brand-cyan flex items-center justify-center">
-                        {idx + 1}
-                      </span>
-                      <span className="text-xs font-semibold">
-                        Area #{idx + 1} ({Math.round(b.width)}x{Math.round(b.height)}px)
-                      </span>
-                    </div>
-
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteActiveBox(b.id);
-                      }}
-                      className="px-2 py-0.5 rounded text-[11px] font-semibold text-rose-400 hover:bg-rose-500/20 border border-rose-500/30 flex items-center gap-1"
-                      title="Remove this area"
+            {/* List of active box chips OR zero-blur auto banner */}
+            {boxes.length === 0 ? (
+              <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs mb-3">
+                <div className="flex items-center gap-2 font-bold text-emerald-200 mb-1.5">
+                  <Sparkles className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>100% Zero-Blur AI Auto Mode</span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-emerald-300/80">
+                  No square box needed! Our AI automatically pinpoints the exact Gemini watermark star and restores every pixel using Reverse Alpha Blending with zero blur.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-44 overflow-y-auto pr-1 mb-3">
+                {boxes.map((b, idx) => {
+                  const isActive = b.id === activeBoxId;
+                  return (
+                    <div
+                      key={b.id}
+                      onClick={() => setActiveBoxId(b.id)}
+                      className={`flex items-center justify-between p-2.5 rounded-xl border cursor-pointer transition-all ${
+                        isActive
+                          ? 'bg-brand-500/20 border-brand-500/50 text-white'
+                          : 'bg-dark-900/60 border-white/5 text-slate-400 hover:text-white'
+                      }`}
                     >
-                      <Trash2 className="w-3 h-3" />
-                      <span>Delete</span>
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
+                      <div className="flex items-center gap-2">
+                        <span className="w-5 h-5 rounded-full bg-dark-950 border border-brand-cyan/40 text-[10px] font-mono font-bold text-brand-cyan flex items-center justify-center">
+                          {idx + 1}
+                        </span>
+                        <span className="text-xs font-semibold">
+                          Area #{idx + 1} ({Math.round(b.width)}x{Math.round(b.height)}px)
+                        </span>
+                      </div>
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteActiveBox(b.id);
+                        }}
+                        className="px-2 py-0.5 rounded text-[11px] font-semibold text-rose-400 hover:bg-rose-500/20 border border-rose-500/30 flex items-center gap-1"
+                        title="Remove this area"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Delete</span>
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Quick Action to Delete Active Box */}
             {activeBox && (
@@ -928,14 +950,26 @@ export default function VideoEditor({ videoData, onProcess, onReset, onAutoClean
           <div className="p-1">
             <button
               onClick={handleStartRemoval}
-              className="w-full py-4 px-6 rounded-2xl font-bold text-sm text-white bg-gradient-to-r from-brand-600 via-brand-500 to-brand-cyan hover:from-brand-500 hover:to-brand-400 shadow-xl shadow-brand-500/30 hover:shadow-brand-500/50 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 group cursor-pointer"
+              className={`w-full py-4 px-6 rounded-2xl font-bold text-sm text-white shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 group cursor-pointer ${
+                boxes.length === 0
+                  ? 'bg-gradient-to-r from-emerald-500 via-teal-500 to-brand-cyan hover:opacity-95 shadow-emerald-500/25'
+                  : 'bg-gradient-to-r from-brand-600 via-brand-500 to-brand-cyan hover:from-brand-500 hover:to-brand-400 shadow-brand-500/30'
+              }`}
             >
               <Sparkles className="w-5 h-5 text-white group-hover:rotate-12 transition-transform" />
-              <span>Remove Watermark & Restore {isImage ? 'Photo' : 'Video'}</span>
+              <span>
+                {boxes.length === 0
+                  ? '✨ Auto-Detect & Remove Gemini Watermark (Zero Blur)'
+                  : `Remove Watermark & Restore ${isImage ? 'Photo' : 'Video'} (${boxes.length})`}
+              </span>
             </button>
             <p className="text-[11px] text-center text-slate-400 mt-2.5 flex items-center justify-center gap-1">
               <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Instant, clean watermark removal</span>
+              <span>
+                {boxes.length === 0
+                  ? 'Mathematical reverse alpha blending: 100% zero blur'
+                  : 'Instant, clean watermark removal'}
+              </span>
             </p>
           </div>
 
@@ -947,10 +981,18 @@ export default function VideoEditor({ videoData, onProcess, onReset, onAutoClean
       <div className="lg:hidden fixed bottom-0 left-0 right-0 p-3 bg-dark-950/95 backdrop-blur-2xl border-t border-white/10 z-50 flex items-center gap-2 shadow-2xl safe-area-bottom">
         <button
           onClick={handleStartRemoval}
-          className="w-full py-3.5 px-4 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-brand-500 via-brand-cyan to-indigo-500 shadow-lg shadow-brand-500/30 flex items-center justify-center gap-2 active:scale-95 transition-transform"
+          className={`w-full py-3.5 px-4 rounded-xl font-bold text-sm text-white shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-transform ${
+            boxes.length === 0
+              ? 'bg-gradient-to-r from-emerald-500 via-teal-500 to-brand-cyan shadow-emerald-500/30'
+              : 'bg-gradient-to-r from-brand-500 via-brand-cyan to-indigo-500 shadow-brand-500/30'
+          }`}
         >
           <Sparkles className="w-4 h-4 text-white" />
-          <span>Remove Watermark & Restore ➔</span>
+          <span>
+            {boxes.length === 0
+              ? '✨ Auto-Remove Watermark (Zero Blur) ➔'
+              : 'Remove Watermark & Restore ➔'}
+          </span>
         </button>
       </div>
     </div>

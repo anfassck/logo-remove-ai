@@ -262,8 +262,8 @@ class VideoProcessor {
     return new Promise((resolve) => {
       const chunks = [];
       const proc = spawn(ffmpegStatic, [
-        '-ss', Math.max(0, timeSec).toFixed(3),
         '-i', filePath,
+        '-ss', Math.max(0, timeSec).toFixed(3),
         '-vframes', '1',
         '-f', 'rawvideo',
         '-pix_fmt', 'rgba',
@@ -290,44 +290,56 @@ class VideoProcessor {
     const duration = Math.max(0.5, metadata.duration || 1);
     const totalFrames = Math.max(1, Math.round(duration * fps));
 
-    // 1. Extract sample frame to locate watermark
-    const sampleTime = Math.min(1.0, Math.max(0.2, duration * 0.25));
-    const sampleBuffer = await this.extractSampleFrame(inputPath, sampleTime, width, height);
-
     let targetX, targetY, targetSize;
 
-    // Auto-detect Gemini watermark using reverse alpha blending scanner
-    if (sampleBuffer) {
-      try {
-        const detection = await removeGeminiWatermarkRaw(sampleBuffer, width, height, { adaptiveMode: 'always' });
-        if (detection && detection.meta && detection.meta.selectedCandidate) {
-          const cand = detection.meta.selectedCandidate;
-          targetX = cand.position.x;
-          targetY = cand.position.y;
-          targetSize = cand.config?.logoSize || cand.position.width || 48;
-          console.log(`[VideoProcessor] Auto-detected video watermark at (${targetX}, ${targetY}) size ${targetSize}px!`);
+    // 1. Try detecting watermark from sample frames across multiple timestamps
+    const sampleTimestamps = [1.0, 0.5, Math.min(2.0, duration * 0.75)].filter(t => t < duration);
+    if (sampleTimestamps.length === 0) sampleTimestamps.push(0.1);
+
+    for (const sTime of sampleTimestamps) {
+      if (targetX !== undefined && targetY !== undefined) break;
+      const sampleBuffer = await this.extractSampleFrame(inputPath, sTime, width, height);
+
+      if (sampleBuffer) {
+        try {
+          const detection = await removeGeminiWatermarkRaw(sampleBuffer, width, height, { adaptiveMode: 'always' });
+          if (detection && detection.meta) {
+            const meta = detection.meta;
+            const pos = meta.position || meta.selectedCandidate?.position;
+            if (pos && typeof pos.x === 'number' && typeof pos.y === 'number' && pos.width > 0) {
+              targetX = pos.x;
+              targetY = pos.y;
+              targetSize = meta.size || pos.width || (width >= 1920 ? 96 : 48);
+              console.log(`[VideoProcessor] Auto-detected video watermark at (${targetX}, ${targetY}) size ${targetSize}px at timestamp ${sTime}s!`);
+              break;
+            }
+          }
+        } catch (detErr) {
+          console.warn('[VideoProcessor] Watermark detection check error:', detErr.message);
         }
-      } catch (detErr) {
-        console.warn('[VideoProcessor] Watermark detection error:', detErr.message);
       }
     }
 
-    // If auto-detection didn't locate candidate, but user provided a box -> use user box
-    if ((targetX === undefined || targetY === undefined) && userMasks && userMasks.length > 0 && userMasks[0].width >= 8) {
+    // 2. If auto-detection didn't locate candidate, but user provided an intentional custom box -> use user box
+    if ((targetX === undefined || targetY === undefined) && userMasks && userMasks.length > 0 && userMasks[0].width >= 10) {
       const uBox = userMasks[0];
       targetX = Math.max(0, Math.round(uBox.x));
       targetY = Math.max(0, Math.round(uBox.y));
       targetSize = Math.max(24, Math.round(Math.min(uBox.width, uBox.height)));
+      console.log(`[VideoProcessor] Using user-specified area: (${targetX}, ${targetY}) size ${targetSize}px`);
     }
 
-    // Default fallback position for Gemini watermark (bottom-right) if not located
+    // 3. Calibrated standard Gemini / Google Veo watermark position (bottom-right)
     if (targetX === undefined || targetY === undefined) {
-      targetSize = Math.max(32, Math.min(64, Math.round(Math.min(width, height) * 0.055)));
-      const marginRight = Math.round(targetSize * 0.7);
-      const marginBottom = Math.round(targetSize * 0.7);
+      // Standard Veo watermark dimensions:
+      // 720p (1280x720): 48px star, ~40px margin from right, ~40px margin from bottom
+      // 1080p (1920x1080) and 4K: 96px star, ~64px margin from right, ~64px margin from bottom
+      targetSize = width >= 1920 ? 96 : 48;
+      const marginRight = width >= 1920 ? 64 : 40;
+      const marginBottom = width >= 1920 ? 64 : 40;
       targetX = Math.max(0, width - targetSize - marginRight);
       targetY = Math.max(0, height - targetSize - marginBottom);
-      console.log(`[VideoProcessor] Using standard bottom-right video watermark position (${targetX}, ${targetY}) size ${targetSize}px`);
+      console.log(`[VideoProcessor] Using calibrated standard Gemini video watermark coordinates: (${targetX}, ${targetY}) size ${targetSize}px`);
     }
 
     // 2. Load exact calibrated alpha map for this watermark size

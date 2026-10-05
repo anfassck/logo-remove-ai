@@ -178,7 +178,7 @@ export default function App() {
           } else if (job.status === 'failed') {
             clearInterval(pollIntervalRef.current);
             setErrorMessage(job.error || 'Video restoration failed.');
-            setViewMode('editor');
+            setViewMode('idle');
           }
         } catch (pollErr) {
           console.error('Polling error:', pollErr);
@@ -188,7 +188,7 @@ export default function App() {
     } catch (err) {
       console.error('Process Error:', err);
       setErrorMessage(err.message || 'Failed to start video restoration process.');
-      setViewMode('editor');
+      setViewMode('idle');
     }
   };
 

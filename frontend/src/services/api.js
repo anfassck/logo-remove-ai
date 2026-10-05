@@ -1,7 +1,15 @@
+const PROD_BACKEND_URL = 'https://logo-remove-backend.onrender.com';
+
 let rawBase = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '');
 if (rawBase && !rawBase.endsWith('/api') && rawBase.startsWith('http')) {
   rawBase = `${rawBase}/api`;
 }
+
+// In production browser environments (e.g. cleanframeai.anfassck.online), auto-connect to live Render backend
+if (!rawBase && typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+  rawBase = `${PROD_BACKEND_URL}/api`;
+}
+
 const API_BASE = rawBase || '/api';
 const SERVER_BASE = API_BASE.replace(/\/api$/, '');
 
@@ -14,8 +22,13 @@ export const apiService = {
     if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('blob:') || url.startsWith('data:')) {
       return url;
     }
-    if (url.startsWith('/api') && API_BASE.startsWith('http')) {
-      return `${SERVER_BASE}${url}`;
+    if (url.startsWith('/api')) {
+      if (API_BASE.startsWith('http')) {
+        return `${SERVER_BASE}${url}`;
+      }
+      if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+        return `${PROD_BACKEND_URL}${url}`;
+      }
     }
     return url;
   },

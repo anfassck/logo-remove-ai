@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "node --max-old-space-size=256 server.js",
-    "build": "npm install && cd backend && npm install && cd ../frontend && npm install && npm run build",
+    "build": "cd frontend && npm install && npm run build && cd .. && node -e \"const fs=require('fs'); fs.cpSync('frontend/dist', 'dist', {recursive:true});\"",
     "postinstall": "cd backend && npm install",
     "dev:backend": "cd backend && npm start",
     "dev:frontend": "cd frontend && npm run dev",
