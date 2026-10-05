@@ -105,10 +105,15 @@ export const videoController = {
         }
       }
 
-      // Verify file exists
-      const uploadsDir = path.resolve('uploads');
+      // Verify file exists (check both ./uploads and backend/uploads)
       const sanitizedFilename = path.basename(filename);
-      const filePath = path.join(uploadsDir, sanitizedFilename);
+      let filePath = path.resolve('uploads', sanitizedFilename);
+      if (!fs.existsSync(filePath)) {
+        const altPath = path.resolve('backend/uploads', sanitizedFilename);
+        if (fs.existsSync(altPath)) {
+          filePath = altPath;
+        }
+      }
 
       if (!fs.existsSync(filePath)) {
         return res.status(404).json({
@@ -315,7 +320,13 @@ export const videoController = {
       }
 
       const safeFilename = path.basename(file);
-      const fullPath = path.resolve(type, safeFilename);
+      let fullPath = path.resolve(type, safeFilename);
+      if (!fs.existsSync(fullPath)) {
+        const altFullPath = path.resolve('backend', type, safeFilename);
+        if (fs.existsSync(altFullPath)) {
+          fullPath = altFullPath;
+        }
+      }
 
       if (!fs.existsSync(fullPath)) {
         return res.status(404).send('Media not found or expired.');
