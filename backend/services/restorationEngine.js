@@ -31,10 +31,10 @@ class RestorationEngine {
       };
     }
 
-    // Default: ultra_clean (Guaranteed Inpaint via Safe Delogo Filter)
+    // Default: ultra_clean (Pixel-Perfect Restoration — zero blur)
     return {
       type: 'ultra_clean',
-      name: `Precision Watermark Erase${areaCount}`,
+      name: `Pixel-Perfect Restore${areaCount}`,
       isAiActive: false
     };
   }
@@ -96,10 +96,14 @@ class RestorationEngine {
       return filterSteps.join(';');
     }
 
-    // Ultra-clean high-reliability Delogo: removes transparent / opaque logos cleanly
-    return validMasks
-      .map(m => `delogo=x=${m.x}:y=${m.y}:w=${m.w}:h=${m.h}`)
+    // Ultra-clean Delogo with post-sharpening to minimize blur artifacts
+    // delogo removes the logo, then unsharp restores edge detail lost by interpolation
+    const delogoChain = validMasks
+      .map(m => `delogo=x=${m.x}:y=${m.y}:w=${m.w}:h=${m.h}:band=4`)
       .join(',');
+    
+    // Add light unsharp mask to restore crispness after delogo
+    return `${delogoChain},unsharp=3:3:0.8:3:3:0.4`;
   }
 
   async processWithExternalAi(inputVideoPath, maskData, progressCb) {

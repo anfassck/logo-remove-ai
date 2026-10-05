@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { apiService } from '../services/api';
 
-export default function VideoEditor({ videoData, onProcess, onReset }) {
+export default function VideoEditor({ videoData, onProcess, onReset, onAutoClean }) {
   const videoRef = useRef(null);
   const containerRef = useRef(null);
 
@@ -445,6 +445,36 @@ export default function VideoEditor({ videoData, onProcess, onReset }) {
           </button>
         </div>
       </div>
+
+      {/* 1-CLICK AUTO-CLEAN BANNER FOR IMAGES (NO BOX NEEDED) */}
+      {isImage && onAutoClean && (
+        <div className="mb-6 p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-brand-900/60 via-indigo-950/60 to-dark-900 border border-brand-500/40 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-brand-500/30 to-brand-cyan/20 border border-brand-400/40 flex items-center justify-center shrink-0 shadow-lg">
+              <Sparkles className="w-5 h-5 text-brand-cyan animate-pulse" />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                <span>Automatic Zero-Blur Cleaner</span>
+                <span className="px-2.5 py-0.5 text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full">
+                  No Box Needed • 100% Sharp
+                </span>
+              </h4>
+              <p className="text-xs text-slate-300 mt-0.5">
+                Automatically detects the Gemini star and reverses transparency without any square blur.
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={onAutoClean}
+            className="w-full sm:w-auto px-5 py-3 rounded-xl font-bold text-xs text-white bg-gradient-to-r from-emerald-500 via-teal-500 to-brand-cyan hover:opacity-95 shadow-lg shadow-emerald-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+          >
+            <Sparkles className="w-4 h-4 text-white" />
+            <span>✨ Run 1-Click Auto-Clean (No Box)</span>
+          </button>
+        </div>
+      )}
 
       {/* QUICK PRESET & POSITION BAR */}
       <div className="mb-6 p-4 rounded-2xl glass-panel border border-white/10 bg-dark-900/90 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">

@@ -417,6 +417,11 @@ export default function UploadZone({ onFileSelect, isUploading, uploadProgress, 
                     <span>Max duration: <strong className="text-white">{limits?.maxDurationSec || 300}s</strong></span>
                   </div>
 
+                  <div className="px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 flex items-center gap-1.5 font-semibold">
+                    <Sparkles className="w-3.5 h-3.5 text-brand-cyan" />
+                    <span>Auto-Detects Gemini Logo (Zero Blur • No Box)</span>
+                  </div>
+
                   <div className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-emerald-300 flex items-center gap-1.5">
                     <span>Audio Preserved</span>
                   </div>
@@ -432,8 +437,9 @@ export default function UploadZone({ onFileSelect, isUploading, uploadProgress, 
                     <span>Max size: <strong className="text-white">{maxMB} MB</strong></span>
                   </div>
 
-                  <div className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-emerald-300 flex items-center gap-1.5">
-                    <span>Lossless Pixel Restoration</span>
+                  <div className="px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 flex items-center gap-1.5 font-semibold">
+                    <Sparkles className="w-3.5 h-3.5 text-brand-cyan" />
+                    <span>Auto-Detects Gemini Star (Zero Blur • No Box)</span>
                   </div>
                 </>
               )}

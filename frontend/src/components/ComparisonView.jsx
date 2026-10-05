@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { apiService } from '../services/api';
 
-export default function ComparisonView({ originalVideo, jobResult, onReset }) {
+export default function ComparisonView({ originalVideo, jobResult, onReset, onEditManual }) {
   const originalVidRef = useRef(null);
   const restoredVidRef = useRef(null);
   const containerRef = useRef(null);
@@ -92,7 +92,7 @@ export default function ComparisonView({ originalVideo, jobResult, onReset }) {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const downloadUrl = apiService.getDownloadUrl(jobResult.jobId);
+  const downloadUrl = jobResult?.cleanUrl || (jobResult?.jobId ? apiService.getDownloadUrl(jobResult.jobId) : (jobResult?.output?.imageUrl || jobResult?.output?.videoUrl));
   const outExt = jobResult?.output?.filename?.slice(jobResult.output.filename.lastIndexOf('.')) || (isImage ? '.png' : '.mp4');
   const downloadFilename = `cleanframe_restored${outExt}`;
 
@@ -275,12 +275,22 @@ export default function ComparisonView({ originalVideo, jobResult, onReset }) {
         </div>
 
         <div className="flex items-center gap-3 w-full sm:w-auto">
+          {onEditManual && (
+            <button
+              onClick={onEditManual}
+              className="w-full sm:w-auto px-4 py-3.5 rounded-xl font-semibold text-xs text-brand-300 hover:text-white bg-dark-900 hover:bg-dark-800 border border-brand-500/30 transition-all flex items-center justify-center gap-1.5"
+            >
+              <Layers className="w-4 h-4 text-brand-cyan" />
+              <span>Manual Box Editor</span>
+            </button>
+          )}
+
           <button
             onClick={onReset}
             className="w-full sm:w-auto px-5 py-3.5 rounded-xl font-semibold text-xs text-slate-300 hover:text-white bg-dark-800 hover:bg-dark-700 border border-white/10 transition-all flex items-center justify-center gap-2"
           >
             <RefreshCw className="w-4 h-4 text-brand-cyan" />
-            <span>Process Another {isImage ? 'Photo' : 'Video'}</span>
+            <span>Upload Another {isImage ? 'Photo' : 'Video'}</span>
           </button>
 
           <a

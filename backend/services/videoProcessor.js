@@ -3,8 +3,11 @@ import ffmpegStatic from 'ffmpeg-static';
 import ffprobeStatic from 'ffprobe-static';
 import path from 'path';
 import fs from 'fs';
+import { spawn } from 'child_process';
 import { restorationEngine } from './restorationEngine.js';
+import { pixelRestorer } from './pixelRestorer.js';
 import { jobManager } from './jobManager.js';
+import { getAlphaMapForSize, unblendRegion, removeGeminiWatermarkRaw } from './geminiRestorer.js';
 
 // Configure static FFmpeg and FFprobe binaries
 try {
@@ -126,9 +129,9 @@ class VideoProcessor {
       }
 
       const inputExt = path.extname(inputPath).toLowerCase();
-      const outputExt = isImage ? inputExt : '.mp4';
-      const outputFilename = `restored_${job.input.fileId}${outputExt}`;
-      const outputPath = path.join(outputsDir, outputFilename);
+      const outputExt = isImage ? '.png' : '.mp4';
+      let outputFilename = `restored_${job.input.fileId}${outputExt}`;
+      let outputPath = path.join(outputsDir, outputFilename);
 
       jobManager.setProgress(jobId, 25, `Applying ${strategy.name}...`, 'restoring');
 
@@ -140,78 +143,81 @@ class VideoProcessor {
       console.log(`[VideoProcessor] Job ${jobId} (${isImage ? 'Image' : 'Video'}): Filter "${filterString}"`);
 
       if (isImage) {
-        // Instant Single-Frame High-Resolution Image Inpainting / Delogo
-        await new Promise((resolve, reject) => {
-          ffmpeg(inputPath)
-            .videoFilters(filterString)
-            .save(outputPath)
-            .on('start', (cmdline) => {
-              console.log(`[FFmpeg Image] Started: ${cmdline}`);
-              jobManager.setProgress(jobId, 50, 'Restoring high-res image pixels...', 'restoring');
-            })
-            .on('end', () => {
-              jobManager.setProgress(jobId, 95, 'Finalizing restored image...', 'rendering');
-              resolve();
-            })
-            .on('error', (err) => {
-              console.error('[FFmpeg Image] Error:', err.message);
-              reject(new Error(`Image restoration failed: ${err.message}`));
-            });
-        });
+        // === HIGH-QUALITY PIXEL-PERFECT IMAGE RESTORATION ===
+        // Uses content-aware pixel synthesis (zero blur, no delogo)
+        // Similar to geminiwatermarkremover.io's reverse alpha blending approach
+        jobManager.setProgress(jobId, 40, 'Analyzing watermark pixels...', 'restoring');
+
+        // Extract masks array from job data
+        let masks = [];
+        if (job.maskData) {
+          if (Array.isArray(job.maskData.masks)) {
+            masks = job.maskData.masks;
+          } else if (typeof job.maskData.x === 'number') {
+            masks = [job.maskData];
+          }
+        }
+
+        // Normalize mask format for pixelRestorer
+        const normalizedMasks = masks.map(m => ({
+          x: m.x || 0,
+          y: m.y || 0,
+          width: m.width || m.w || 40,
+          height: m.height || m.h || 40,
+          feather: m.feather || 4
+        }));
+
+        jobManager.setProgress(jobId, 55, 'Restoring pixels with zero-blur engine...', 'restoring');
+
+        // Force PNG output for maximum quality (lossless)
+        const outputPathPng = outputPath.replace(/\.[^.]+$/, '.png');
+
+        const result = await pixelRestorer.restoreImage(inputPath, outputPathPng, normalizedMasks);
+
+        // Update output path if changed to PNG
+        if (outputPathPng !== outputPath) {
+          outputPath = outputPathPng;
+          outputFilename = path.basename(outputPathPng);
+        }
+
+        jobManager.setProgress(jobId, 95, 'Finalizing restored image (zero-blur quality)...', 'rendering');
       } else {
-        // High-Quality Multi-Frame Video Restoration
-        await new Promise((resolve, reject) => {
-          let command = ffmpeg(inputPath);
+        // === HIGH-QUALITY ZERO-BLUR VIDEO RESTORATION ===
+        jobManager.setProgress(jobId, 25, 'Scanning video frames for Gemini watermark...', 'restoring');
 
-          if (strategy.type === 'smart_blend') {
-            command = command.complexFilter(filterString);
-          } else {
-            command = command.videoFilters(filterString);
-          }
+        // Extract masks from job if user manually selected any
+        let userMasks = [];
+        if (job.maskData) {
+          if (Array.isArray(job.maskData.masks)) userMasks = job.maskData.masks;
+          else if (typeof job.maskData.x === 'number') userMasks = [job.maskData];
+        }
 
-          command = command
-            .videoCodec('libx264')
-            .outputOptions([
-              '-preset veryfast',
-              '-crf 20',
-              '-threads 2',
-              '-pix_fmt yuv420p',
-              '-movflags +faststart',
-              '-max_muxing_queue_size 1024'
-            ]);
+        let usedZeroBlur = false;
+        try {
+          usedZeroBlur = await this.processVideoZeroBlur(
+            inputPath,
+            outputPath,
+            metadata,
+            userMasks,
+            (percent, step) => {
+              jobManager.setProgress(jobId, percent, step, 'restoring');
+            }
+          );
+        } catch (unblendErr) {
+          console.warn('[VideoProcessor] Zero-blur video unblending error, falling back:', unblendErr.message);
+        }
 
-          // Preserve or encode audio
-          if (metadata.hasAudio) {
-            command = command.audioCodec('aac').audioBitrate('192k');
-          } else {
-            command = command.noAudio();
-          }
+        if (usedZeroBlur) {
+          strategy.name = 'Reverse Alpha Blending (Zero Blur)';
+        }
 
-          command
-            .on('start', (cmdline) => {
-              console.log(`[FFmpeg Video] Started: ${cmdline}`);
-              jobManager.setProgress(jobId, 35, 'Restoring video frames...', 'restoring');
-            })
-            .on('progress', (progress) => {
-              if (progress && progress.percent) {
-                const mappedProgress = 35 + (progress.percent * 0.55);
-                jobManager.setProgress(
-                  jobId,
-                  Math.min(90, mappedProgress),
-                  `Restoring frames: ${Math.round(progress.percent)}% complete`
-                );
-              }
-            })
-            .on('end', () => {
-              jobManager.setProgress(jobId, 95, 'Finalizing and verifying video stream...', 'rendering');
-              resolve();
-            })
-            .on('error', (err, stdout, stderr) => {
-              console.error('[FFmpeg Video] Error:', err.message, stderr);
-              reject(new Error(`Video processing failed: ${err.message}`));
-            })
-            .save(outputPath);
-        });
+        // Fallback only if zero-blur streaming could not complete
+        if (!usedZeroBlur) {
+          jobManager.setProgress(jobId, 45, 'Processing video frames...', 'restoring');
+          await this.processVideoFfmpegFallback(inputPath, outputPath, metadata, strategy, filterString, (percent, step) => {
+            jobManager.setProgress(jobId, percent, step, 'restoring');
+          });
+        }
       }
 
       // Verify output file exists and has size
@@ -247,6 +253,219 @@ class VideoProcessor {
       jobManager.failJob(jobId, error.message);
       throw error;
     }
+  }
+
+  /**
+   * Extract a single raw RGBA frame from video at given timestamp
+   */
+  async extractSampleFrame(filePath, timeSec, width, height) {
+    return new Promise((resolve) => {
+      const chunks = [];
+      const proc = spawn(ffmpegStatic, [
+        '-ss', Math.max(0, timeSec).toFixed(3),
+        '-i', filePath,
+        '-vframes', '1',
+        '-f', 'rawvideo',
+        '-pix_fmt', 'rgba',
+        '-s', `${width}x${height}`,
+        '-'
+      ]);
+
+      proc.stdout.on('data', (d) => chunks.push(d));
+      proc.on('close', (code) => {
+        if (code === 0 && chunks.length > 0) resolve(Buffer.concat(chunks));
+        else resolve(null);
+      });
+      proc.on('error', () => resolve(null));
+    });
+  }
+
+  /**
+   * Stream video frames through Reverse Alpha Blending for 100% Zero-Blur output
+   */
+  async processVideoZeroBlur(inputPath, outputPath, metadata, userMasks, onProgress) {
+    const width = metadata.width;
+    const height = metadata.height;
+    const fps = Math.max(1, metadata.fps || 30);
+    const duration = Math.max(0.5, metadata.duration || 1);
+    const totalFrames = Math.max(1, Math.round(duration * fps));
+
+    // 1. Extract sample frame to locate watermark
+    const sampleTime = Math.min(1.0, Math.max(0.2, duration * 0.25));
+    const sampleBuffer = await this.extractSampleFrame(inputPath, sampleTime, width, height);
+
+    let targetX, targetY, targetSize;
+
+    // Auto-detect Gemini watermark using reverse alpha blending scanner
+    if (sampleBuffer) {
+      try {
+        const detection = await removeGeminiWatermarkRaw(sampleBuffer, width, height, { adaptiveMode: 'always' });
+        if (detection && detection.meta && detection.meta.selectedCandidate) {
+          const cand = detection.meta.selectedCandidate;
+          targetX = cand.position.x;
+          targetY = cand.position.y;
+          targetSize = cand.config?.logoSize || cand.position.width || 48;
+          console.log(`[VideoProcessor] Auto-detected video watermark at (${targetX}, ${targetY}) size ${targetSize}px!`);
+        }
+      } catch (detErr) {
+        console.warn('[VideoProcessor] Watermark detection error:', detErr.message);
+      }
+    }
+
+    // If auto-detection didn't locate candidate, but user provided a box -> use user box
+    if ((targetX === undefined || targetY === undefined) && userMasks && userMasks.length > 0 && userMasks[0].width >= 8) {
+      const uBox = userMasks[0];
+      targetX = Math.max(0, Math.round(uBox.x));
+      targetY = Math.max(0, Math.round(uBox.y));
+      targetSize = Math.max(24, Math.round(Math.min(uBox.width, uBox.height)));
+    }
+
+    // Default fallback position for Gemini watermark (bottom-right) if not located
+    if (targetX === undefined || targetY === undefined) {
+      targetSize = Math.max(32, Math.min(64, Math.round(Math.min(width, height) * 0.055)));
+      const marginRight = Math.round(targetSize * 0.7);
+      const marginBottom = Math.round(targetSize * 0.7);
+      targetX = Math.max(0, width - targetSize - marginRight);
+      targetY = Math.max(0, height - targetSize - marginBottom);
+      console.log(`[VideoProcessor] Using standard bottom-right video watermark position (${targetX}, ${targetY}) size ${targetSize}px`);
+    }
+
+    // 2. Load exact calibrated alpha map for this watermark size
+    const alphaMap = await getAlphaMapForSize(targetSize);
+    if (!alphaMap) {
+      throw new Error(`Could not generate alpha map for size ${targetSize}`);
+    }
+
+    onProgress(35, 'Restoring video frames with Zero Blur (Reverse Alpha Blending)...');
+
+    // 3. Setup streaming pipeline
+    const frameBytes = width * height * 4;
+
+    const ffIn = spawn(ffmpegStatic, [
+      '-i', inputPath,
+      '-f', 'rawvideo',
+      '-pix_fmt', 'rgba',
+      '-'
+    ]);
+
+    const ffOut = spawn(ffmpegStatic, [
+      '-y',
+      '-f', 'rawvideo',
+      '-pix_fmt', 'rgba',
+      '-s', `${width}x${height}`,
+      '-r', fps.toString(),
+      '-i', '-',
+      '-i', inputPath,
+      '-map', '0:v:0',
+      '-map', '1:a:0?',
+      '-c:v', 'libx264',
+      '-preset', 'veryfast',
+      '-crf', '19',
+      '-pix_fmt', 'yuv420p',
+      '-c:a', 'copy',
+      '-movflags', '+faststart',
+      outputPath
+    ]);
+
+    ffIn.stderr.on('data', () => {});
+    ffOut.stderr.on('data', () => {});
+
+    let bufferQueue = Buffer.alloc(0);
+    let processedFrames = 0;
+    let lastProgressUpdate = 0;
+
+    await new Promise((resolve, reject) => {
+      ffIn.stdout.on('data', (chunk) => {
+        bufferQueue = Buffer.concat([bufferQueue, chunk]);
+
+        while (bufferQueue.length >= frameBytes) {
+          const frameBuf = bufferQueue.subarray(0, frameBytes);
+          bufferQueue = bufferQueue.subarray(frameBytes);
+
+          // Apply zero-blur mathematical reverse alpha blending on target region
+          const imgData = {
+            width,
+            height,
+            data: new Uint8ClampedArray(frameBuf.buffer, frameBuf.byteOffset, frameBytes)
+          };
+
+          unblendRegion(
+            imgData,
+            alphaMap,
+            { x: targetX, y: targetY, width: targetSize, height: targetSize },
+            { alphaGain: 1, logoValue: 255 }
+          );
+
+          ffOut.stdin.write(frameBuf);
+          processedFrames++;
+
+          const now = Date.now();
+          if (now - lastProgressUpdate > 500) {
+            lastProgressUpdate = now;
+            const pct = Math.min(92, 35 + Math.round((processedFrames / totalFrames) * 57));
+            onProgress(pct, `Restoring frames with Zero Blur: ${Math.round((processedFrames / totalFrames) * 100)}% complete`);
+          }
+        }
+      });
+
+      ffIn.stdout.on('end', () => {
+        ffOut.stdin.end();
+      });
+
+      ffIn.on('error', reject);
+      ffOut.on('error', reject);
+
+      ffOut.on('close', (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(`FFmpeg encoding exited with code ${code}`));
+      });
+    });
+
+    onProgress(95, 'Finalizing zero-blur video stream...');
+    return true;
+  }
+
+  /**
+   * Fallback video restoration using standard FFmpeg filters
+   */
+  async processVideoFfmpegFallback(inputPath, outputPath, metadata, strategy, filterString, onProgress) {
+    return new Promise((resolve, reject) => {
+      let command = ffmpeg(inputPath);
+
+      if (strategy.type === 'smart_blend') {
+        command = command.complexFilter(filterString);
+      } else {
+        command = command.videoFilters(filterString);
+      }
+
+      command = command
+        .videoCodec('libx264')
+        .outputOptions([
+          '-preset veryfast',
+          '-crf 20',
+          '-threads 2',
+          '-pix_fmt yuv420p',
+          '-movflags +faststart',
+          '-max_muxing_queue_size 1024'
+        ]);
+
+      if (metadata.hasAudio) {
+        command = command.audioCodec('aac').audioBitrate('192k');
+      } else {
+        command = command.noAudio();
+      }
+
+      command
+        .on('progress', (progress) => {
+          if (progress && progress.percent) {
+            const mappedProgress = 35 + (progress.percent * 0.55);
+            onProgress(Math.min(90, mappedProgress), `Restoring frames: ${Math.round(progress.percent)}% complete`);
+          }
+        })
+        .on('end', resolve)
+        .on('error', reject)
+        .save(outputPath);
+    });
   }
 }
 

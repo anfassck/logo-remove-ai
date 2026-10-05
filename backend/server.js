@@ -5,10 +5,16 @@ import path from 'path';
 import fs from 'fs';
 import apiRouter from './routes/api.js';
 
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.join(__dirname, '.env') });
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5005;
 
 // Ensure uploads and outputs directories exist
 ['uploads', 'outputs', 'temp'].forEach(dir => {
@@ -39,6 +45,19 @@ app.get('/health', (req, res) => {
 
 // Mount API Routes
 app.use('/api', apiRouter);
+
+// Serve Frontend in Production if dist exists
+const frontendDist = path.resolve('frontend/dist');
+const altFrontendDist = path.join(__dirname, '../frontend/dist');
+const distPath = fs.existsSync(frontendDist) ? frontendDist : (fs.existsSync(altFrontendDist) ? altFrontendDist : null);
+
+if (distPath) {
+  app.use(express.static(distPath));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/health')) return next();
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
 
 // Global Error Handler
 app.use((err, req, res, next) => {

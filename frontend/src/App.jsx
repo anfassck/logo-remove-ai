@@ -11,6 +11,7 @@ import PrivacyBanner from './components/PrivacyBanner';
 import FAQ from './components/FAQ';
 import Footer from './components/Footer';
 import { apiService } from './services/api';
+import { cleanGeminiImageBrowser } from './services/geminiCleaner';
 
 export default function App() {
   // App state modes: 'idle' | 'editor' | 'processing' | 'comparison'
@@ -51,11 +52,73 @@ export default function App() {
     };
   }, []);
 
-  // Handle Video Upload
+  // Handle Video / Photo Upload
   const handleFileSelect = async (file) => {
+    setErrorMessage(null);
+
+    const isImg = file.type.startsWith('image/') || ['.jpg', '.jpeg', '.png', '.webp', '.bmp'].some(ext => file.name.toLowerCase().endsWith(ext));
+
+    // =========================================================================
+    // 100% AUTOMATIC ZERO-BLUR GEMINI REMOVAL (LIKE geminiwatermarkremover.io)
+    // No square box selection needed! Automatically detects & unblends star.
+    // =========================================================================
+    if (isImg) {
+      setViewMode('processing');
+      setCurrentJob({
+        status: 'processing',
+        progress: 45,
+        step: '✨ Auto-detecting and removing Gemini watermark with Reverse Alpha Blending (Zero Blur)...'
+      });
+
+      try {
+        const cleaned = await cleanGeminiImageBrowser(file);
+        
+        // Also upload original to backend so user can switch to manual editor if desired
+        apiService.uploadVideo(file, () => {}).then(res => {
+          if (res?.video) {
+            setVideoData(res.video);
+          }
+        }).catch(() => {});
+
+        setJobResult({
+          jobId: 'local_' + Date.now(),
+          isImage: true,
+          cleanUrl: cleaned.cleanUrl,
+          output: {
+            filename: `clean_${file.name.replace(/\\.[^.]+$/, '')}.png`,
+            imageUrl: cleaned.cleanUrl,
+            videoUrl: cleaned.cleanUrl,
+            mediaType: 'image',
+            width: cleaned.width,
+            height: cleaned.height
+          },
+          meta: cleaned.meta
+        });
+
+        setVideoData({
+          filename: file.name,
+          originalName: file.name,
+          imageUrl: cleaned.originalUrl,
+          videoUrl: cleaned.originalUrl,
+          mediaType: 'image',
+          width: cleaned.width,
+          height: cleaned.height,
+          size: file.size
+        });
+
+        setViewMode('comparison');
+        return;
+      } catch (clientErr) {
+        console.warn('Browser cleaning failed, falling back to manual studio:', clientErr);
+      }
+    }
+
+    // =========================================================================
+    // 100% AUTOMATIC ZERO-BLUR VIDEO REMOVAL (NO BOX SELECTION NEEDED)
+    // Automatically uploads, detects watermark location, and unblends frames.
+    // =========================================================================
     setIsUploading(true);
     setUploadProgress(0);
-    setErrorMessage(null);
 
     try {
       const response = await apiService.uploadVideo(file, (percent) => {
@@ -64,21 +127,20 @@ export default function App() {
 
       if (response.success && response.video) {
         setVideoData(response.video);
-        setViewMode('editor');
-        // Smooth scroll to editor
-        setTimeout(() => {
-          const editorElement = document.getElementById('studio-section');
-          if (editorElement) {
-            editorElement.scrollIntoView({ behavior: 'smooth' });
-          }
-        }, 100);
+        setIsUploading(false);
+
+        // Automatically launch zero-blur restoration without opening manual box editor
+        handleStartProcess({
+          filename: response.video.filename,
+          masks: [],
+          engine: 'gemini_zero_blur'
+        });
       } else {
         throw new Error(response.error || 'Upload failed.');
       }
     } catch (err) {
       console.error('Upload Error:', err);
-      setErrorMessage(err.message || 'An error occurred during video upload. Please check your network and backend.');
-    } finally {
+      setErrorMessage(err.message || 'An error occurred during upload. Please check your network and backend.');
       setIsUploading(false);
     }
   };
@@ -128,6 +190,16 @@ export default function App() {
       setErrorMessage(err.message || 'Failed to start video restoration process.');
       setViewMode('editor');
     }
+  };
+
+  // Auto-clean Gemini Image without box
+  const handleAutoClean = () => {
+    if (!videoData) return;
+    handleStartProcess({
+      filename: videoData.filename,
+      masks: [],
+      engine: 'gemini_zero_blur'
+    });
   };
 
   // Reset Workflow
@@ -199,6 +271,7 @@ export default function App() {
               videoData={videoData}
               onProcess={handleStartProcess}
               onReset={handleReset}
+              onAutoClean={handleAutoClean}
             />
           </section>
         )}
@@ -218,6 +291,7 @@ export default function App() {
               originalVideo={videoData}
               jobResult={jobResult}
               onReset={handleReset}
+              onEditManual={() => setViewMode('editor')}
             />
           </section>
         )}

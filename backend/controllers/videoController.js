@@ -105,13 +105,6 @@ export const videoController = {
         }
       }
 
-      if (maskList.length === 0) {
-        return res.status(400).json({
-          success: false,
-          error: 'Please select at least one watermark removal area on the video.'
-        });
-      }
-
       // Verify file exists
       const uploadsDir = path.resolve('uploads');
       const sanitizedFilename = path.basename(filename);
@@ -120,10 +113,12 @@ export const videoController = {
       if (!fs.existsSync(filePath)) {
         return res.status(404).json({
           success: false,
-          error: 'The uploaded video file has expired or could not be found. Please re-upload.'
+          error: 'The uploaded file has expired or could not be found. Please re-upload.'
         });
       }
 
+      const fileExt = path.extname(sanitizedFilename).toLowerCase();
+      const isImage = ['.jpg', '.jpeg', '.png', '.webp', '.bmp'].includes(fileExt);
       const fileId = path.basename(sanitizedFilename, path.extname(sanitizedFilename));
 
       // Normalize all masks
@@ -145,10 +140,10 @@ export const videoController = {
         },
         maskData: {
           masks: cleanedMasks,
-          x: cleanedMasks[0].x,
-          y: cleanedMasks[0].y,
-          width: cleanedMasks[0].width,
-          height: cleanedMasks[0].height
+          x: cleanedMasks[0]?.x || 0,
+          y: cleanedMasks[0]?.y || 0,
+          width: cleanedMasks[0]?.width || 40,
+          height: cleanedMasks[0]?.height || 40
         },
         engine
       });
