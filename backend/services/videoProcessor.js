@@ -353,10 +353,11 @@ class VideoProcessor {
 
     onProgress(35, 'Restoring video frames with Zero Blur (Reverse Alpha Blending)...');
 
-    // 3. Setup streaming pipeline
+    // 3. Setup streaming pipeline with strict memory bounds
     const frameBytes = width * height * 4;
 
     const ffIn = spawn(ffmpegStatic, [
+      '-threads', '1',
       '-i', inputPath,
       '-f', 'rawvideo',
       '-pix_fmt', 'rgba',
@@ -365,6 +366,7 @@ class VideoProcessor {
 
     const ffOut = spawn(ffmpegStatic, [
       '-y',
+      '-threads', '1',
       '-f', 'rawvideo',
       '-pix_fmt', 'rgba',
       '-s', `${width}x${height}`,
@@ -374,8 +376,8 @@ class VideoProcessor {
       '-map', '0:v:0',
       '-map', '1:a:0?',
       '-c:v', 'libx264',
-      '-preset', 'veryfast',
-      '-crf', '19',
+      '-preset', 'ultrafast',
+      '-crf', '20',
       '-pix_fmt', 'yuv420p',
       '-c:a', 'copy',
       '-movflags', '+faststart',
@@ -388,12 +390,11 @@ class VideoProcessor {
     let bufferQueue = Buffer.alloc(0);
     let processedFrames = 0;
     let lastProgressUpdate = 0;
+    let isWriting = false;
 
     await new Promise((resolve, reject) => {
-      ffIn.stdout.on('data', (chunk) => {
-        bufferQueue = Buffer.concat([bufferQueue, chunk]);
-
-        while (bufferQueue.length >= frameBytes) {
+      const tryProcess = () => {
+        while (!isWriting && bufferQueue.length >= frameBytes) {
           const frameBuf = bufferQueue.subarray(0, frameBytes);
           bufferQueue = bufferQueue.subarray(frameBytes);
 
@@ -411,8 +412,8 @@ class VideoProcessor {
             { alphaGain: targetAlphaGain, logoValue: 255 }
           );
 
-          ffOut.stdin.write(frameBuf);
           processedFrames++;
+          const canWrite = ffOut.stdin.write(frameBuf);
 
           const now = Date.now();
           if (now - lastProgressUpdate > 500) {
@@ -420,14 +421,50 @@ class VideoProcessor {
             const pct = Math.min(92, 35 + Math.round((processedFrames / totalFrames) * 57));
             onProgress(pct, `Restoring frames with Zero Blur: ${Math.round((processedFrames / totalFrames) * 100)}% complete`);
           }
+
+          if (!canWrite) {
+            isWriting = true;
+            ffIn.stdout.pause();
+            ffOut.stdin.once('drain', () => {
+              isWriting = false;
+              if (bufferQueue.length < frameBytes * 2 && ffIn.stdout.isPaused()) {
+                ffIn.stdout.resume();
+              }
+              tryProcess();
+            });
+            break;
+          }
         }
+
+        // Strict backpressure: keep at most 2 uncompressed frames in memory (~16 MB total)
+        if (bufferQueue.length >= frameBytes * 2) {
+          ffIn.stdout.pause();
+        } else if (!isWriting && ffIn.stdout.isPaused()) {
+          ffIn.stdout.resume();
+        }
+      };
+
+      ffIn.stdout.on('data', (chunk) => {
+        bufferQueue = Buffer.concat([bufferQueue, chunk]);
+        tryProcess();
       });
 
       ffIn.stdout.on('end', () => {
-        ffOut.stdin.end();
+        const finish = () => {
+          if (bufferQueue.length >= frameBytes) {
+            tryProcess();
+            setImmediate(finish);
+          } else {
+            ffOut.stdin.end();
+          }
+        };
+        finish();
       });
 
-      ffIn.on('error', reject);
+      ffIn.on('error', (err) => {
+        try { ffOut.kill(); } catch (_) {}
+        reject(err);
+      });
       ffOut.on('error', reject);
 
       ffOut.on('close', (code) => {

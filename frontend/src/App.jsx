@@ -165,9 +165,11 @@ export default function App() {
       // Start Polling Job Status
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
 
+      let consecutiveFailures = 0;
       pollIntervalRef.current = setInterval(async () => {
         try {
           const job = await apiService.getJobStatus(jobId);
+          consecutiveFailures = 0;
           setCurrentJob(job);
 
           if (job.status === 'completed') {
@@ -185,6 +187,13 @@ export default function App() {
           }
         } catch (pollErr) {
           console.error('Polling error:', pollErr);
+          consecutiveFailures++;
+          // If server fails 8 times consecutively (e.g. server restarted or OOM), notify user
+          if (consecutiveFailures >= 8) {
+            clearInterval(pollIntervalRef.current);
+            setErrorMessage('The cloud server was temporarily interrupted or restarted. Please try again.');
+            setViewMode('idle');
+          }
         }
       }, 1000);
 
