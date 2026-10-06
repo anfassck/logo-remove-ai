@@ -1,13 +1,21 @@
 const PROD_BACKEND_URL = 'https://logo-remove-backend.onrender.com';
+const LOCAL_BACKEND_URL = 'http://localhost:5005';
 
-let rawBase = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '');
-if (rawBase && !rawBase.endsWith('/api') && rawBase.startsWith('http')) {
-  rawBase = `${rawBase}/api`;
-}
+const isLocal = typeof window !== 'undefined' && (
+  window.location.hostname === 'localhost' ||
+  window.location.hostname === '127.0.0.1' ||
+  window.location.hostname.startsWith('192.168.')
+);
 
-// In production browser environments (e.g. cleanframeai.anfassck.online), auto-connect to live Render backend
-if (!rawBase && typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-  rawBase = `${PROD_BACKEND_URL}/api`;
+let rawBase = '';
+if (isLocal) {
+  // Always use local backend on localhost
+  rawBase = `${LOCAL_BACKEND_URL}/api`;
+} else {
+  rawBase = (import.meta.env.VITE_API_BASE_URL || PROD_BACKEND_URL).trim().replace(/\/+$/, '');
+  if (!rawBase.endsWith('/api') && rawBase.startsWith('http')) {
+    rawBase = `${rawBase}/api`;
+  }
 }
 
 const API_BASE = rawBase || '/api';
@@ -46,7 +54,7 @@ export const apiService = {
       return {
         success: true,
         limits: {
-          maxFileSizeMB: 100,
+          maxFileSizeMB: 200,
           maxDurationSec: 300,
           maxConcurrentJobs: 3,
           fileExpiryMinutes: 30,

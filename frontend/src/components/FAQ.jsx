@@ -12,7 +12,7 @@ const FAQS = [
   },
   {
     q: 'Does the tool work on long videos?',
-    a: 'Yes, CleanFrame AI handles video clips up to 5 minutes (300 seconds) and 100 MB per file during the free beta to ensure fast processing and optimal server availability.'
+    a: 'Yes, CleanFrame AI handles video clips up to 5 minutes (300 seconds) and 200 MB per file during the free beta to ensure fast processing and optimal server availability.'
   },
   {
     q: 'Are my uploaded videos stored permanently?',

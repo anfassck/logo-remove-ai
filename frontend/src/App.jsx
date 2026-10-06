@@ -29,7 +29,7 @@ export default function App() {
 
   // Backend limits
   const [serverLimits, setServerLimits] = useState({
-    maxFileSizeMB: 100,
+    maxFileSizeMB: 200,
     maxDurationSec: 300,
     maxConcurrentJobs: 3,
     fileExpiryMinutes: 30

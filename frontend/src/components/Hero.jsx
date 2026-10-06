@@ -138,24 +138,11 @@ export default function Hero({ onUploadClick, onLearnMoreClick }) {
                     </div>
                   </div>
 
-                  {/* Simulated Watermark Removal Target Box (Top-Right) */}
-                  <motion.div 
-                    animate={{ 
-                      scale: [1, 1.04, 1],
-                      boxShadow: [
-                        '0 0 0 0 rgba(99, 102, 241, 0)',
-                        '0 0 15px 2px rgba(6, 182, 212, 0.4)',
-                        '0 0 0 0 rgba(99, 102, 241, 0)'
-                      ]
-                    }}
-                    transition={{ repeat: Infinity, duration: 3 }}
-                    className="absolute top-4 right-4 w-28 h-12 rounded-lg border-2 border-dashed border-brand-cyan bg-brand-cyan/15 backdrop-blur-sm flex flex-col items-center justify-center z-20"
-                  >
-                    <span className="text-[9px] font-mono font-bold text-brand-cyan tracking-wider uppercase">
-                      Target Area
-                    </span>
-                    <span className="text-[8px] text-slate-300 font-mono">Restoring...</span>
-                  </motion.div>
+                  {/* Clean AI Auto-Detection Tag (No box/kalli) */}
+                  <div className="absolute top-4 right-4 px-3 py-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 backdrop-blur-md flex items-center gap-1.5 z-20">
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="text-[10px] font-semibold text-emerald-300">100% Zero-Blur Auto Engine</span>
+                  </div>
 
                   {/* Laser Scanner Line */}
                   <div className="absolute inset-x-0 h-0.5 bg-gradient-to-r from-transparent via-brand-cyan to-transparent shadow-[0_0_12px_#06B6D4] animate-scanner pointer-events-none z-30"></div>

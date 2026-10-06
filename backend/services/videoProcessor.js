@@ -291,6 +291,7 @@ class VideoProcessor {
     const totalFrames = Math.max(1, Math.round(duration * fps));
 
     let targetX, targetY, targetSize;
+    let targetAlphaGain = 0.45;
 
     // 1. Try detecting watermark from sample frames across multiple timestamps
     const sampleTimestamps = [1.0, 0.5, Math.min(2.0, duration * 0.75)].filter(t => t < duration);
@@ -310,7 +311,8 @@ class VideoProcessor {
               targetX = pos.x;
               targetY = pos.y;
               targetSize = meta.size || pos.width || (width >= 1920 ? 96 : 48);
-              console.log(`[VideoProcessor] Auto-detected video watermark at (${targetX}, ${targetY}) size ${targetSize}px at timestamp ${sTime}s!`);
+              targetAlphaGain = meta.alphaGain || 0.45;
+              console.log(`[VideoProcessor] Auto-detected video watermark at (${targetX}, ${targetY}) size ${targetSize}px with alphaGain ${targetAlphaGain} at timestamp ${sTime}s!`);
               break;
             }
           }
@@ -332,14 +334,15 @@ class VideoProcessor {
     // 3. Calibrated standard Gemini / Google Veo watermark position (bottom-right)
     if (targetX === undefined || targetY === undefined) {
       // Standard Veo watermark dimensions:
-      // 720p (1280x720): 48px star, ~40px margin from right, ~40px margin from bottom
-      // 1080p (1920x1080) and 4K: 96px star, ~64px margin from right, ~64px margin from bottom
+      // 720p (1280x720): 48px star, 96px margin from right, 96px margin from bottom
+      // 1080p (1920x1080) and 4K: 96px star, 96px margin from right, 96px margin from bottom
       targetSize = width >= 1920 ? 96 : 48;
-      const marginRight = width >= 1920 ? 64 : 40;
-      const marginBottom = width >= 1920 ? 64 : 40;
+      const marginRight = 96;
+      const marginBottom = 96;
       targetX = Math.max(0, width - targetSize - marginRight);
       targetY = Math.max(0, height - targetSize - marginBottom);
-      console.log(`[VideoProcessor] Using calibrated standard Gemini video watermark coordinates: (${targetX}, ${targetY}) size ${targetSize}px`);
+      targetAlphaGain = 0.45;
+      console.log(`[VideoProcessor] Using calibrated standard Gemini video watermark coordinates: (${targetX}, ${targetY}) size ${targetSize}px gain ${targetAlphaGain}`);
     }
 
     // 2. Load exact calibrated alpha map for this watermark size
@@ -405,7 +408,7 @@ class VideoProcessor {
             imgData,
             alphaMap,
             { x: targetX, y: targetY, width: targetSize, height: targetSize },
-            { alphaGain: 1, logoValue: 255 }
+            { alphaGain: targetAlphaGain, logoValue: 255 }
           );
 
           ffOut.stdin.write(frameBuf);
