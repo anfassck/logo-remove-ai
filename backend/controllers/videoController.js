@@ -387,7 +387,7 @@ export const videoController = {
     return res.status(200).json({
       success: true,
       limits: {
-        maxFileSizeMB: parseInt(process.env.MAX_FILE_SIZE_MB || '100', 10),
+        maxFileSizeMB: parseInt(process.env.MAX_FILE_SIZE_MB || '200', 10),
         maxDurationSec: parseInt(process.env.MAX_VIDEO_DURATION_SEC || '300', 10),
         maxConcurrentJobs: parseInt(process.env.MAX_CONCURRENT_JOBS || '3', 10),
         fileExpiryMinutes: parseInt(process.env.FILE_EXPIRY_MINUTES || '30', 10),

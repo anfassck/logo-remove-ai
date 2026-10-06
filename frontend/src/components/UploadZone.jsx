@@ -11,7 +11,7 @@ export default function UploadZone({ onFileSelect, isUploading, uploadProgress, 
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef(null);
 
-  const maxMB = limits?.maxFileSizeMB || 100;
+  const maxMB = Math.max(200, limits?.maxFileSizeMB || 200);
 
   const handleDragOver = (e) => {
     e.preventDefault();

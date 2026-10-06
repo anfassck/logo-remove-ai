@@ -41,7 +41,10 @@ export default function App() {
   useEffect(() => {
     apiService.getConfig().then(data => {
       if (data?.limits) {
-        setServerLimits(data.limits);
+        setServerLimits({
+          ...data.limits,
+          maxFileSizeMB: Math.max(200, data.limits.maxFileSizeMB || 200)
+        });
       }
     }).catch(err => {
       console.warn('Could not fetch server limits:', err);
