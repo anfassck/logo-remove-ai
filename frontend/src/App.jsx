@@ -61,11 +61,22 @@ export default function App() {
 
     const isImg = file.type.startsWith('image/') || ['.jpg', '.jpeg', '.png', '.webp', '.bmp'].some(ext => file.name.toLowerCase().endsWith(ext));
 
+    const localPreviewUrl = URL.createObjectURL(file);
+
     // =========================================================================
     // 100% AUTOMATIC ZERO-BLUR GEMINI REMOVAL (LIKE geminiwatermarkremover.io)
     // No square box selection needed! Automatically detects & unblends star.
     // =========================================================================
     if (isImg) {
+      setVideoData({
+        filename: file.name,
+        originalName: file.name,
+        imageUrl: localPreviewUrl,
+        videoUrl: localPreviewUrl,
+        localPreviewUrl,
+        mediaType: 'image',
+        size: file.size
+      });
       setViewMode('processing');
       setCurrentJob({
         status: 'processing',
@@ -79,7 +90,7 @@ export default function App() {
         // Also upload original to backend so user can switch to manual editor if desired
         apiService.uploadVideo(file, () => {}).then(res => {
           if (res?.video) {
-            setVideoData(res.video);
+            setVideoData(prev => ({ ...res.video, localPreviewUrl }));
           }
         }).catch(() => {});
 
@@ -88,7 +99,7 @@ export default function App() {
           isImage: true,
           cleanUrl: cleaned.cleanUrl,
           output: {
-            filename: `clean_${file.name.replace(/\\.[^.]+$/, '')}.png`,
+            filename: `clean_${file.name.replace(/\.[^.]+$/, '')}.png`,
             imageUrl: cleaned.cleanUrl,
             videoUrl: cleaned.cleanUrl,
             mediaType: 'image',
@@ -101,8 +112,9 @@ export default function App() {
         setVideoData({
           filename: file.name,
           originalName: file.name,
-          imageUrl: cleaned.originalUrl,
-          videoUrl: cleaned.originalUrl,
+          imageUrl: cleaned.originalUrl || localPreviewUrl,
+          videoUrl: cleaned.originalUrl || localPreviewUrl,
+          localPreviewUrl,
           mediaType: 'image',
           width: cleaned.width,
           height: cleaned.height,
@@ -120,6 +132,13 @@ export default function App() {
     // 100% AUTOMATIC ZERO-BLUR VIDEO REMOVAL (NO BOX SELECTION NEEDED)
     // Automatically uploads, detects watermark location, and unblends frames.
     // =========================================================================
+    setVideoData({
+      filename: file.name,
+      originalName: file.name,
+      localPreviewUrl,
+      mediaType: 'video',
+      size: file.size
+    });
     setIsUploading(true);
     setUploadProgress(0);
 
@@ -129,7 +148,10 @@ export default function App() {
       });
 
       if (response.success && response.video) {
-        setVideoData(response.video);
+        setVideoData({
+          ...response.video,
+          localPreviewUrl
+        });
         setIsUploading(false);
 
         // Automatically launch zero-blur restoration without opening manual box editor

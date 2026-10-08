@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Sparkles, Layers, Cpu, CheckCircle2, Loader2, AlertCircle, 
-  RefreshCw, XCircle, Eye, EyeOff, ScanLine, Wand2 
+  RefreshCw, XCircle, Eye, EyeOff, ScanLine, Wand2, Film, Image as ImageIcon 
 } from 'lucide-react';
 import { apiService } from '../services/api';
 
@@ -23,12 +23,13 @@ export default function ProcessingView({ job, videoData, onCancel }) {
   // Manual split slider or auto-progress
   const [sliderPos, setSliderPos] = useState(50);
   const [isHovered, setIsHovered] = useState(false);
+  const [hasMediaError, setHasMediaError] = useState(false);
 
   // Sync split slider with actual progress smoothly if user isn't hovering
   useEffect(() => {
     if (!isHovered) {
-      // Map 10-95% progress to 20-80% slider reveal
-      const mapped = Math.max(20, Math.min(80, Math.round(progress * 0.8 + 10)));
+      // Map 10-95% progress to 15-85% slider reveal
+      const mapped = Math.max(15, Math.min(85, Math.round(progress * 0.8 + 10)));
       setSliderPos(mapped);
     }
   }, [progress, isHovered]);
@@ -41,11 +42,13 @@ export default function ProcessingView({ job, videoData, onCancel }) {
   if (progress > 85) activeStepIndex = 4;
   if (progress >= 98) activeStepIndex = 5;
 
-  // Resolve thumbnail/preview image from videoData
-  const previewImg = videoData?.imageUrl || 
+  // Resolve thumbnail/preview image from videoData (prioritize instant zero-latency local blob)
+  const isVideo = videoData?.mediaType === 'video';
+  const rawPreview = videoData?.localPreviewUrl || 
+    videoData?.imageUrl || 
     (videoData?.thumbnail ? `/api/media/uploads/${videoData.thumbnail}` : null) ||
     videoData?.videoUrl || null;
-  const resolvedPreview = previewImg ? apiService.resolveMediaUrl(previewImg) : null;
+  const resolvedPreview = rawPreview ? apiService.resolveMediaUrl(rawPreview) : null;
 
   return (
     <div className="w-full max-w-4xl mx-auto px-4 py-8">
@@ -64,7 +67,7 @@ export default function ProcessingView({ job, videoData, onCancel }) {
             <span>Live Zero-Blur Restoration Engine</span>
           </div>
           <h3 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            Cleaning your {videoData?.mediaType === 'image' ? 'photo' : 'video'} live...
+            Cleaning your {isVideo ? 'video' : 'photo'} live...
           </h3>
           <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-md mx-auto">
             Mathematical reverse alpha blending is unblending the watermark in real-time.
@@ -74,10 +77,10 @@ export default function ProcessingView({ job, videoData, onCancel }) {
         {/* =========================================================================
             LIVE BEFORE & AFTER REVEAL SCANNER SCREEN
         ========================================================================= */}
-        <div className="relative rounded-2xl overflow-hidden border border-white/15 bg-dark-900/80 shadow-2xl mb-8 group">
+        <div className="relative rounded-2xl overflow-hidden border border-white/15 bg-dark-900/90 shadow-2xl mb-8 group">
           {/* Top Badges overlay */}
           <div className="absolute top-3 left-3 z-30 flex items-center gap-2">
-            <span className="px-2.5 py-1 rounded-md bg-dark-900/85 backdrop-blur-md border border-rose-500/30 text-[11px] font-bold text-rose-300 flex items-center gap-1.5 shadow-md">
+            <span className="px-2.5 py-1 rounded-md bg-dark-900/85 backdrop-blur-md border border-rose-500/40 text-[11px] font-bold text-rose-300 flex items-center gap-1.5 shadow-md">
               <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
               Before: Watermark
             </span>
@@ -92,7 +95,7 @@ export default function ProcessingView({ job, videoData, onCancel }) {
 
           {/* Main Visual Comparison Frame */}
           <div 
-            className="relative w-full aspect-video sm:h-[340px] max-h-[380px] bg-dark-950 flex items-center justify-center overflow-hidden cursor-ew-resize select-none"
+            className="relative w-full aspect-video sm:h-[360px] max-h-[400px] bg-dark-950 flex items-center justify-center overflow-hidden cursor-ew-resize select-none"
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
             onMouseMove={(e) => {
@@ -101,81 +104,113 @@ export default function ProcessingView({ job, videoData, onCancel }) {
               setSliderPos(pct);
             }}
           >
-            {/* 1. AFTER / RESTORED LAYER (Full background) */}
+            {/* 1. AFTER / RESTORED LAYER (Watermark Erased Layer) */}
             <div className="absolute inset-0 w-full h-full flex items-center justify-center">
-              {resolvedPreview ? (
-                <img 
-                  src={resolvedPreview} 
-                  alt="Restored Preview" 
-                  className="w-full h-full object-contain filter contrast-[1.02]"
-                />
+              {resolvedPreview && !hasMediaError ? (
+                isVideo ? (
+                  <video
+                    src={resolvedPreview}
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    className="w-full h-full object-contain pointer-events-none"
+                    onError={() => setHasMediaError(true)}
+                  />
+                ) : (
+                  <img 
+                    src={resolvedPreview} 
+                    alt="Restored Preview" 
+                    className="w-full h-full object-contain pointer-events-none"
+                    onError={() => setHasMediaError(true)}
+                  />
+                )
               ) : (
-                <div className="w-full h-full bg-gradient-to-br from-dark-900 via-dark-800 to-dark-950 flex items-center justify-center">
-                  <div className="text-center p-6">
-                    <ScanLine className="w-12 h-12 text-brand-cyan/60 mx-auto mb-2 animate-pulse" />
-                    <span className="text-xs text-slate-400 font-mono">Restoring Visual Stream...</span>
-                  </div>
+                <div className="w-full h-full bg-gradient-to-br from-dark-900 via-dark-800 to-dark-950 flex flex-col items-center justify-center p-6 text-center">
+                  <Film className="w-12 h-12 text-brand-cyan/60 mb-2 animate-pulse" />
+                  <span className="text-xs text-white font-semibold">{videoData?.originalName || 'Video Footage'}</span>
+                  <span className="text-[11px] text-slate-400 font-mono mt-1">Reconstructing Frames Frame-by-Frame...</span>
                 </div>
               )}
+
+              {/* CLEAN INDICATOR ON AFTER SIDE */}
+              <div 
+                className="absolute bottom-5 right-6 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/20 backdrop-blur-md border border-emerald-500/40 shadow-lg pointer-events-none"
+                style={{ opacity: sliderPos < 75 ? 1 : 0 }}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-emerald-400 animate-spin" />
+                <span className="text-xs font-semibold text-emerald-300">CleanFrame Zero-Blur</span>
+              </div>
             </div>
 
-            {/* 2. BEFORE LAYER (Clipped by slider position) with simulated watermark */}
+            {/* 2. BEFORE LAYER (Clipped by slider position) with actual watermark visible */}
             <div 
               className="absolute inset-0 w-full h-full overflow-hidden"
               style={{ clipPath: `inset(0 ${100 - sliderPos}% 0 0)` }}
             >
-              {resolvedPreview ? (
-                <img 
-                  src={resolvedPreview} 
-                  alt="Original Preview" 
-                  className="w-full h-full object-contain"
-                />
+              {resolvedPreview && !hasMediaError ? (
+                isVideo ? (
+                  <video
+                    src={resolvedPreview}
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    className="w-full h-full object-contain pointer-events-none"
+                  />
+                ) : (
+                  <img 
+                    src={resolvedPreview} 
+                    alt="Original Preview" 
+                    className="w-full h-full object-contain pointer-events-none"
+                  />
+                )
               ) : (
-                <div className="w-full h-full bg-gradient-to-br from-dark-900 via-dark-800 to-dark-950 flex items-center justify-center">
-                  <div className="text-center p-6">
-                    <ScanLine className="w-12 h-12 text-brand-cyan/60 mx-auto mb-2 animate-pulse" />
-                    <span className="text-xs text-slate-400 font-mono">Restoring Visual Stream...</span>
-                  </div>
+                <div className="w-full h-full bg-gradient-to-br from-dark-900 via-dark-800 to-dark-950 flex flex-col items-center justify-center p-6 text-center">
+                  <Film className="w-12 h-12 text-brand-cyan/60 mb-2 animate-pulse" />
+                  <span className="text-xs text-white font-semibold">{videoData?.originalName || 'Video Footage'}</span>
+                  <span className="text-[11px] text-slate-400 font-mono mt-1">Reconstructing Frames Frame-by-Frame...</span>
                 </div>
               )}
 
               {/* Watermark Overlay shown ONLY on Before side (Bottom-Right) */}
-              <div className="absolute bottom-5 right-6 z-20 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-black/40 backdrop-blur-xs border border-white/20 pointer-events-none shadow-lg">
-                <span className="text-xl leading-none text-white/90">✦</span>
-                <span className="text-xs font-semibold text-white/90 tracking-wide font-sans">Gemini</span>
+              <div className="absolute bottom-5 right-6 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/70 backdrop-blur-md border border-white/20 pointer-events-none shadow-xl">
+                <span className="text-xl leading-none text-white/95">✦</span>
+                <span className="text-xs font-bold text-white/95 tracking-wide font-sans">Gemini</span>
+                <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping"></span>
               </div>
             </div>
 
             {/* 3. Glowing Laser Scanner Divider Line */}
             <div 
-              className="absolute top-0 bottom-0 w-1 bg-gradient-to-b from-brand-cyan via-white to-brand-500 shadow-[0_0_16px_#06B6D4] z-25 pointer-events-none"
+              className="absolute top-0 bottom-0 w-1 bg-gradient-to-b from-brand-cyan via-white to-brand-500 shadow-[0_0_18px_#06B6D4] z-25 pointer-events-none"
               style={{ left: `${sliderPos}%` }}
             >
               {/* Laser Scanner Bead Icon in the center */}
-              <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-8 h-8 rounded-full bg-brand-500/90 border-2 border-white shadow-xl shadow-brand-cyan/50 flex items-center justify-center">
+              <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-8 h-8 rounded-full bg-brand-500 border-2 border-white shadow-xl shadow-brand-cyan/60 flex items-center justify-center">
                 <Wand2 className="w-4 h-4 text-white animate-spin" />
               </div>
             </div>
 
             {/* Floating Live Watermark Zoom Loupe (Bottom-Right inset) */}
-            <div className="absolute bottom-3 right-3 z-30 hidden sm:flex items-center gap-2 p-2 rounded-xl bg-dark-950/90 border border-white/15 backdrop-blur-md shadow-2xl">
-              <div className="relative w-16 h-10 rounded-lg overflow-hidden border border-brand-cyan/40 bg-dark-900 flex items-center justify-center">
-                {/* Watermark dissolving inside loupe */}
+            <div className="absolute bottom-3 right-3 z-30 hidden sm:flex items-center gap-2.5 p-2 rounded-xl bg-dark-950/95 border border-white/20 backdrop-blur-md shadow-2xl">
+              <div className="relative w-14 h-9 rounded-lg overflow-hidden border border-brand-cyan/40 bg-dark-900 flex items-center justify-center">
+                {/* Watermark dissolving inside loupe as progress increases */}
                 <span 
-                  className="text-base text-white/90 font-bold transition-opacity duration-300"
-                  style={{ opacity: Math.max(0, 1 - progress / 85) }}
+                  className="text-sm text-white/95 font-bold transition-opacity duration-300"
+                  style={{ opacity: Math.max(0, 1 - progress / 75) }}
                 >
                   ✦
                 </span>
-                {progress > 50 && (
+                {progress > 45 && (
                   <Sparkles className="w-3.5 h-3.5 text-emerald-400 absolute inset-0 m-auto animate-ping" />
                 )}
               </div>
-              <div className="text-left pr-1">
+              <div className="text-left pr-1.5">
                 <div className="text-[10px] font-mono uppercase text-brand-cyan font-bold tracking-wider">
                   Target Zone
                 </div>
-                <div className="text-[10px] font-semibold text-slate-300">
+                <div className="text-[10px] font-semibold text-slate-200">
                   {progress < 70 ? 'Unblending Star...' : '✨ Erased 100%'}
                 </div>
               </div>
@@ -184,13 +219,13 @@ export default function ProcessingView({ job, videoData, onCancel }) {
           </div>
 
           {/* Interactive Hint strip below frame */}
-          <div className="bg-dark-950/80 px-4 py-2 border-t border-white/10 flex items-center justify-between text-[11px] text-slate-400">
-            <span className="flex items-center gap-1.5">
+          <div className="bg-dark-950/90 px-4 py-2.5 border-t border-white/10 flex items-center justify-between text-[11px] text-slate-300">
+            <span className="flex items-center gap-1.5 font-medium">
               <ScanLine className="w-3.5 h-3.5 text-brand-cyan" />
-              <span>Drag slider or hover to compare Before & After live</span>
+              <span>Hover or drag slider to compare Before & After live</span>
             </span>
-            <span className="font-mono text-brand-300 font-semibold">
-              Frame Progress: {progress}%
+            <span className="font-mono text-brand-300 font-bold">
+              Restoration: {progress}%
             </span>
           </div>
         </div>
