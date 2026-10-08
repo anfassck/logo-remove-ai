@@ -292,6 +292,7 @@ export default function App() {
           <section className="py-12">
             <ProcessingView
               job={currentJob}
+              videoData={videoData}
               onCancel={handleReset}
             />
           </section>
